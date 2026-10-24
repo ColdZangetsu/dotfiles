@@ -1,0 +1,8 @@
+[Unit]
+Description=Luces Govee: vigila el color del fondo
+
+[Path]
+PathChanged=%h/.local/state/caelestia/scheme.json
+
+[Install]
+WantedBy=default.target

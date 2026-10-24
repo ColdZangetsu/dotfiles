@@ -1,0 +1,13 @@
+[Unit]
+Description=Restaurar fondos de Wallpaper Engine (wallmux-we)
+PartOf=graphical-session.target
+After=graphical-session.target wallmux.service
+
+[Service]
+Type=oneshot
+# Sin esto systemd mata los linux-wallpaperengine al terminar el script
+RemainAfterExit=yes
+ExecStart=%h/.local/bin/wallmux-we restore
+
+[Install]
+WantedBy=graphical-session.target

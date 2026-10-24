@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Aviso "ya quedó" tras un reinicio remoto (versión Linux de
+# C:\Users\Ovi\Nero\reinicio-remoto\aviso-listo.ps1; el usuario lo pidió el 2026-10-22).
+# Cuando Linux arrancó por reinicio remoto y ya está todo (modo trabajo aplicado, Sunshine,
+# Steam, nero-remoto conectado), el bot manda "Ya todo listo con el reinicio🤓🎮".
+# Si a los 10 min algo no levantó, avisa qué falta. Lanzarlo SOLO en arranque remoto
+# (arranque-remoto-sesion, después de modo-trabajo on) con systemd-run --user --unit=aviso-listo.
+log=/mnt/Compartido/Nero/avisos/aviso-listo.log   # reinicio-remoto/ es de root en Linux
+logea() { echo "$(date +%Y-%m-%dT%H:%M:%S) [linux] $*" >> "$log"; }
+
+falta() {
+    local f=()
+    { [[ -e "$XDG_RUNTIME_DIR/modo-trabajo" ]] && ! pgrep -f 'modo-trabajo on' >/dev/null; } || f+=('modo trabajo')
+    systemctl --user -q is-active app-dev.lizardbyte.app.Sunshine || f+=('Sunshine')
+    pgrep -x steam >/dev/null || f+=('Steam')
+    systemctl --user -q is-active nero-remoto || f+=('Nero Linux')
+    local IFS=','; echo "${f[*]}"
+}
+
+limite=$(( $(date +%s) + 600 ))
+while :; do
+    f=$(falta)
+    [[ -z "$f" || $(date +%s) -ge $limite ]] && break
+    sleep 15
+done
+if [[ -z "$f" ]]; then texto='Ya todo listo con el reinicio🤓🎮'
+else texto="⚠️ Reinicio en Linux, pero a los 10 min falta: ${f//,/, }"; fi
+
+for i in $(seq 1 12); do
+    if curl -sf -m 30 -X POST http://ZANGETSU_IP:47123/enviar \
+         -H 'Content-Type: text/plain; charset=utf-8' --data-binary "$texto" >/dev/null; then
+        logea "enviado: $texto"; exit 0
+    fi
+    logea "envío intento $i falló"; sleep 15
+done
+logea 'NO se pudo enviar (bot sin conexión)'

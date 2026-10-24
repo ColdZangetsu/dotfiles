@@ -1,0 +1,6 @@
+#!/bin/sh
+# Si no hay internet, deshace el amarre a 5 GHz
+if ! ping -c 3 -W 3 1.1.1.1 >/dev/null 2>&1 && ! ping -c 3 -W 3 8.8.8.8 >/dev/null 2>&1; then
+  /home/ovi/wifi-revertir.sh
+  notify-send "Wi-Fi" "Sin internet: se deshizo el amarre a 5 GHz"
+fi

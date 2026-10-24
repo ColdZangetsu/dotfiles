@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Selector de pantalla para xdg-desktop-portal-hyprland (el hyprland-share-picker no se dibuja).
+# Imprime "[SELECTION]r/<tipo>:<valor>" como espera xdph.
+opts=""
+while read -r name desc; do
+    opts+="🖥  Pantalla $name — $desc"$'\n'
+done < <(hyprctl monitors -j | jq -r '.[] | "\(.name) \(.description)"')
+opts+="✂  Región (seleccionar con el mouse)"$'\n'
+
+# Ventanas: id[HC>]clase[HT>]título[HE>]dirección[HA>]...
+declare -A win
+if [[ -n "$XDPH_WINDOW_SHARING_LIST" ]]; then
+    IFS=$'\x01' read -ra entries <<< "${XDPH_WINDOW_SHARING_LIST//\[HA>\]/$'\x01'}"
+    for e in "${entries[@]}"; do
+        [[ "$e" == *"[HC>]"* ]] || continue
+        id="${e%%\[HC>\]*}"; rest="${e#*\[HC>\]}"
+        class="${rest%%\[HT>\]*}"; rest="${rest#*\[HT>\]}"
+        title="${rest%%\[HE>\]*}"
+        label="🪟  $class — ${title:0:70}"
+        win["$label"]="$id"
+        opts+="$label"$'\n'
+    done
+fi
+
+choice=$(printf '%s' "$opts" | fuzzel --dmenu --prompt "Compartir: " --width 70 --lines 12) || exit 1
+
+case "$choice" in
+    "🖥  Pantalla "*)
+        mon="${choice#🖥  Pantalla }"; mon="${mon%% *}"
+        echo "[SELECTION]r/screen:$mon" ;;
+    "✂  Región"*)
+        geo=$(slurp -f "%o@%x,%y,%w,%h") || exit 1
+        echo "[SELECTION]r/region:$geo" ;;
+    *)
+        [[ -n "${win[$choice]}" ]] || exit 1
+        echo "[SELECTION]r/window:${win[$choice]}" ;;
+esac

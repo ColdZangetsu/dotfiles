@@ -1,0 +1,59 @@
+#!/usr/bin/env python3
+# Si cambiaste cables de puerto, reacomoda los fondos y paletas que se guardan
+# por nombre de puerto (DP-1, DP-2...) para que cada monitor conserve los suyos.
+# Recuerda qué modelo estaba en qué puerto en ~/.local/state/monitores.json.
+# Uso: monitores-reacomodar   (después de cambiar cables; no hace nada si no cambió)
+import json
+import subprocess
+from pathlib import Path
+
+HOME = Path.home()
+MAPA = HOME / ".local/state/monitores.json"
+ESTADOS = [HOME / ".local/state/wallmux/state.json", HOME / ".local/state/wallmux-we/state.json"]
+SCHEMES = HOME / ".local/state/caelestia/schemes"
+
+
+def modelo(desc):  # sin número de serie
+    return desc.rsplit(" ", 1)[0]
+
+
+actual = {m["name"]: modelo(m["description"])
+          for m in json.loads(subprocess.run(["hyprctl", "monitors", "-j"],
+                                             capture_output=True, text=True).stdout)}
+try:
+    anterior = json.loads(MAPA.read_text())
+except (OSError, ValueError):
+    anterior = None
+
+if anterior is None or anterior == actual:
+    MAPA.write_text(json.dumps(actual, indent=2))
+    print("Sin cambios de puerto." if anterior else "Mapa guardado.")
+    raise SystemExit
+
+por_modelo = {mod: puerto for puerto, mod in actual.items()}
+renombre = {viejo: por_modelo[mod] for viejo, mod in anterior.items()
+            if mod in por_modelo and por_modelo[mod] != viejo}
+print("Cambios:", ", ".join(f"{a} -> {b}" for a, b in renombre.items()))
+
+for f in ESTADOS:
+    try:
+        datos = json.loads(f.read_text())
+    except (OSError, ValueError):
+        continue
+    raiz = datos["monitors"] if "monitors" in datos else datos
+    nuevo = {renombre.get(k, k): v for k, v in raiz.items()}
+    raiz.clear()
+    raiz.update(nuevo)
+    f.write_text(json.dumps(datos, indent=2))
+
+tmp = {}
+for viejo, nuevo in renombre.items():
+    p = SCHEMES / f"{viejo}.json"
+    if p.exists():
+        tmp[nuevo] = p.read_text()
+        p.unlink()
+for nuevo, texto in tmp.items():
+    (SCHEMES / f"{nuevo}.json").write_text(texto)
+
+MAPA.write_text(json.dumps(actual, indent=2))
+print("Listo. Reinicia sesión (o vuelve a poner los fondos) para aplicarlo.")

@@ -1,0 +1,8 @@
+[Unit]
+Description=Luces Govee: tomar el color del fondo
+
+[Service]
+Type=oneshot
+# En modo trabajo las luces se quedan apagadas (modo-trabajo crea este archivo)
+ExecCondition=/bin/sh -c "! test -e %t/modo-trabajo"
+ExecStart=%h/.local/bin/govee fondo

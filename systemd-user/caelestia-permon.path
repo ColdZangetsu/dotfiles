@@ -1,0 +1,8 @@
+[Unit]
+Description=Vigila actualizaciones de paquetes para Caelestia por monitor
+
+[Path]
+PathChanged=/var/lib/pacman/local
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,17 @@
+#!/bin/sh
+# Graba los monitores juntos en un solo video (LG izquierda, ASUS derecha, XENEON abajo al centro).
+# Uso: grabar-monitores        -> los tres
+#      grabar-monitores dos    -> solo LG + ASUS
+# Vuelve a correrlo (o Ctrl+C) para detener. Videos en tu carpeta de videos (XDG), en Grabaciones
+DIR="$(xdg-user-dir VIDEOS)/Grabaciones"; mkdir -p "$DIR"
+if pkill -INT -f "gpu-screen-recorder -w .*;x=2560"; then
+    notify-send "Grabación guardada" "$DIR"
+    exit 0
+fi
+puerto() { hyprctl monitors -j | jq -r --arg m "$1" '.[] | select(.description | contains($m)) | .name'; }
+LG=$(puerto "LG ULTRAGEAR"); ASUS=$(puerto "XG27ACDMS"); XEN=$(puerto "XENEON EDGE")
+fuente="$LG|$ASUS;x=2560"
+[ "$1" != "dos" ] && [ -n "$XEN" ] && fuente="$fuente|$XEN;x=1280;y=1440"
+salida=$DIR/monitores-$(date +%F_%H-%M-%S).mp4
+notify-send "Grabando monitores" "Vuelve a correr grabar-monitores para detener"
+exec gpu-screen-recorder -w "$fuente" -f 60 -k hevc -a default_output -o "$salida"

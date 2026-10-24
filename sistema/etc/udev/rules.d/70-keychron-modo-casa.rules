@@ -1,0 +1,3 @@
+# Deja que la sesión del usuario lea el teclado Keychron K2 HE (3434:0e20) directo del kernel,
+# para ~/.local/bin/modo-casa-tecla (Super+Inicio en modo trabajo, con el teclado apagado en Hyprland).
+ACTION=="add|change", SUBSYSTEM=="input", KERNEL=="event*", ENV{ID_VENDOR_ID}=="3434", ENV{ID_MODEL_ID}=="0e20", ENV{ID_INPUT_KEYBOARD}=="1", TAG+="uaccess"

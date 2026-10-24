@@ -1,0 +1,6 @@
+active = ""
+active_category = ""
+active_subcategory = ""
+before_switch = []
+after_switch = []
+entries = []

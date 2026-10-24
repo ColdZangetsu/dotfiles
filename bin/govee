@@ -1,0 +1,177 @@
+#!/usr/bin/env python3
+# Control de las luces Govee por la red local (Govee LAN API).
+#   govee                      estado de todas
+#   govee on|off [luz]         prender / apagar
+#   govee color ff00aa [luz]   color en hex (o: govee color 255 0 170)
+#   govee brillo 50 [luz]      brillo 1-100
+#   govee blanco 4000 [luz]    blanco con temperatura en kelvin (2000-9000)
+#   govee fondo [luz]          color según el fondo (paleta de Caelestia del monitor principal)
+#   govee buscar               vuelve a buscar luces en la red
+#   govee esperar [segundos]   espera a que las luces respondan (al iniciar sesión)
+# [luz] es el nombre de ~/.config/govee/luces.json, o "todas" (por omisión).
+import colorsys
+import json
+import socket
+import sys
+import time
+from pathlib import Path
+
+CONFIG = Path.home() / ".config/govee/luces.json"
+SCHEME = Path.home() / ".local/state/caelestia/scheme.json"
+
+
+def wallpaper_colour():
+    """Tono del color clave del fondo, más saturado y brillante para que luzca en un LED."""
+    c = json.loads(SCHEME.read_text())["colours"]
+    hexc = c.get("primary_paletteKeyColor") or c["primary"]
+    r, g, b = (int(hexc[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    h, s, _ = colorsys.rgb_to_hsv(r, g, b)
+    s = 0 if s < 0.08 else max(0.75, min(1.0, s * 2))  # fondos grises -> luz blanca
+    r, g, b = colorsys.hsv_to_rgb(h, s, 1.0)
+    return round(r * 255), round(g * 255), round(b * 255)
+
+
+def socket_rx(timeout=2):
+    rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    rx.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    rx.bind(("", 4002))
+    rx.settimeout(timeout)
+    return rx
+
+
+def scan(seconds=4):
+    rx = socket_rx(1)
+    tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    tx.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+    msg = json.dumps({"msg": {"cmd": "scan", "data": {"account_topic": "reserve"}}}).encode()
+    found, end = {}, time.time() + seconds
+    while time.time() < end:
+        try:
+            tx.sendto(msg, ("239.255.255.250", 4001))
+        except OSError:  # todavía sin red (al iniciar sesión)
+            time.sleep(1)
+            continue
+        try:
+            while True:
+                data = json.loads(rx.recvfrom(4096)[0])["msg"]["data"]
+                found[data["device"]] = data
+        except (socket.timeout, ValueError, KeyError):
+            pass
+    return found
+
+
+def load():
+    try:
+        return json.loads(CONFIG.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def save(lights):
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG.write_text(json.dumps(lights, indent=2, ensure_ascii=False) + "\n")
+
+
+def refresh():
+    """Busca luces y actualiza IPs; las nuevas se nombran luz1, luz2..."""
+    lights = load()
+    by_dev = {v["device"]: k for k, v in lights.items()}
+    for dev, d in scan().items():
+        name = by_dev.get(dev)
+        if not name:
+            n = 1
+            while f"luz{n}" in lights:
+                n += 1
+            name = f"luz{n}"
+        lights[name] = {"device": dev, "ip": d["ip"], "sku": d["sku"]}
+    save(lights)
+    return lights
+
+
+def targets(lights, name):
+    if name in (None, "todas"):
+        return list(lights.items())
+    if name not in lights:
+        sys.exit(f"No conozco la luz «{name}». Tengo: {', '.join(lights)}")
+    return [(name, lights[name])]
+
+
+def send(ip, cmd, data):
+    tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    tx.sendto(json.dumps({"msg": {"cmd": cmd, "data": data}}).encode(), (ip, 4003))
+
+
+def status(ip):
+    rx = socket_rx(1.5)
+    try:
+        send(ip, "devStatus", {})
+        return json.loads(rx.recvfrom(4096)[0])["msg"]["data"]
+    except (OSError, ValueError, KeyError):  # incluye timeout y "Network is unreachable"
+        return None
+
+
+def parse_color(args):
+    if len(args) >= 3 and all(a.isdigit() for a in args[:3]):
+        return tuple(int(a) for a in args[:3]), args[3:]
+    h = args[0].lstrip("#")
+    return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)), args[1:]
+
+
+def main():
+    args = sys.argv[1:]
+    lights = load() or refresh()
+    if not lights:
+        sys.exit("No encontré luces. ¿Están en la misma red y con «LAN Control» activado?")
+    cmd = args.pop(0) if args else "estado"
+
+    if cmd == "esperar":
+        end = time.time() + (int(args[0]) if args else 60)
+        while time.time() < end:
+            if all(status(l["ip"]) for l in lights.values()):
+                return
+            lights = refresh() or lights  # por si cambió alguna IP
+            time.sleep(2)
+        sys.exit("Algunas luces no respondieron a tiempo")
+    if cmd == "buscar":
+        for name, l in refresh().items():
+            print(f"{name}: {l['sku']} en {l['ip']}")
+        return
+    if cmd == "estado":
+        for name, l in lights.items():
+            s = status(l["ip"])
+            if not s:
+                print(f"{name} ({l['sku']}): no responde")
+                continue
+            c = s["color"]
+            what = (f"blanco {s['colorTemInKelvin']}K" if s.get("colorTemInKelvin")
+                    else f"#{c['r']:02x}{c['g']:02x}{c['b']:02x}")
+            print(f"{name} ({l['sku']}): {'prendida' if s['onOff'] else 'apagada'}, "
+                  f"{s['brightness']}%, {what}")
+        return
+
+    if cmd in ("on", "off", "prender", "apagar"):
+        on = cmd in ("on", "prender")
+        for _, l in targets(lights, args[0] if args else None):
+            send(l["ip"], "turn", {"value": 1 if on else 0})
+    elif cmd == "brillo":
+        value = max(1, min(100, int(args[0])))
+        for _, l in targets(lights, args[1] if len(args) > 1 else None):
+            send(l["ip"], "brightness", {"value": value})
+    elif cmd == "color":
+        (r, g, b), rest = parse_color(args)
+        for _, l in targets(lights, rest[0] if rest else None):
+            send(l["ip"], "colorwc", {"color": {"r": r, "g": g, "b": b}, "colorTemInKelvin": 0})
+    elif cmd == "fondo":
+        r, g, b = wallpaper_colour()
+        for _, l in targets(lights, args[0] if args else None):
+            send(l["ip"], "colorwc", {"color": {"r": r, "g": g, "b": b}, "colorTemInKelvin": 0})
+    elif cmd == "blanco":
+        k = max(2000, min(9000, int(args[0]) if args else 4000))
+        for _, l in targets(lights, args[1] if len(args) > 1 else None):
+            send(l["ip"], "colorwc", {"color": {"r": 0, "g": 0, "b": 0}, "colorTemInKelvin": k})
+    else:
+        sys.exit("Comandos: estado, on, off, color, brillo, blanco, fondo, buscar, esperar")
+
+
+if __name__ == "__main__":
+    main()

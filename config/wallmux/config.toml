@@ -1,0 +1,185 @@
+[general]
+wallpaper_dirs = [
+    "~/Pictures/Wallpapers",
+    "~/Videos/Wallpapers",
+]
+default_monitor = "all"
+restore_on_startup = true
+thumbnail_size = 256
+all_monitor_mode = "simultaneous"
+
+[backend_rules]
+image = "awww"
+gif = "awww"
+video = "mpvpaper"
+
+[backend_fallbacks]
+awww = [
+    "swww",
+]
+swww = []
+hyprpaper = []
+mpvpaper = []
+gslapper = []
+
+[backends.awww]
+command = "awww"
+transition_type = "grow"
+transition_step = 90
+transition_duration = 0.8
+transition_fps = 60
+transition_angle = 45.0
+transition_pos = "center"
+invert_y = false
+transition_bezier = ".54,0,.34,.99"
+transition_wave = "20,20"
+
+[backends.swww]
+command = "swww"
+transition_type = "grow"
+transition_step = 90
+transition_duration = 0.8
+transition_fps = 60
+transition_angle = 45.0
+transition_pos = "center"
+invert_y = false
+transition_bezier = ".54,0,.34,.99"
+transition_wave = "20,20"
+
+[backends.hyprpaper]
+command = "hyprctl"
+fit_mode = "cover"
+
+[backends.mpvpaper]
+command = "mpvpaper"
+options = "no-config no-audio loop-file=inf hwdec-extra-frames=0 keep-open=yes video-sync=audio interpolation=no scale=bilinear cscale=bilinear dscale=bilinear panscan=1.0 osd-level=0 no-osc no-osd-bar really-quiet"
+hardware_decoding = "automatic"
+
+[backends.gslapper]
+command = "gslapper"
+
+[hooks]
+before_set = ['/home/ovi/.local/bin/wallmux-we stop {monitor} --file "{file}"']
+after_set = ['/home/ovi/.config/wallmux/hooks/colores.sh {monitor} {source_for_colors}']
+timeout_seconds = 30
+
+[hooks.backends]
+awww = true
+swww = true
+hyprpaper = true
+mpvpaper = true
+gslapper = true
+
+[autoswitch]
+enabled = false
+interval_seconds = 300
+mode = "random"
+target = "all"
+monitor = ""
+
+[gui]
+zen_mode = false
+close_after_set = false
+
+[inhibition]
+enabled = true
+check_interval_seconds = 5.0
+pause_autoswitch = true
+pause_videos = true
+inhibit_manual_commands = false
+fullscreen = false
+process_names = [
+    "gamescope",
+    "gamemode",
+    "wine64",
+    "wineserver",
+    "wallmux-pausa",
+]
+class_patterns = []
+title_patterns = []
+
+[notifications]
+enabled = true
+switched_wallpaper = true
+switching_failed = true
+video_optimization = true
+command = "notify-send"
+app_name = "Wallmux"
+icon = "wallmux-gui"
+desktop_entry = "wallmux-gui"
+
+[daemon]
+startup_restore_retry_seconds = 5.0
+
+[video_optimization]
+enabled = true
+auto_optimize = true
+profile = "balanced"
+cache_dir = ""
+prefer_optimized = true
+bulk_warning = true
+max_concurrent_jobs = 2
+library_scan_interval_seconds = 30
+codec = "libx264"
+codec_names = [
+    "h264",
+]
+container = "mp4"
+extension = ".mp4"
+max_width = 2560
+max_height = 1440
+max_bit_rate = 45000000
+crf = 22
+preset = "medium"
+loop_friendly = true
+loop_gop_size = 60
+extra_args = [
+    "-pix_fmt",
+    "yuv420p",
+    "-movflags",
+    "+faststart",
+]
+
+[cache]
+maintenance_enabled = true
+cleanup_interval_seconds = 86400
+cleanup_policy = "stale-only"
+thumbnail_max_age_days = 60
+optimized_video_max_size_mb = 10240
+
+[transitions]
+video_stop_timeout_seconds = 2.0
+kill_video_on_timeout = true
+
+[transitions.basic]
+enabled = true
+video_start_settle_seconds = 0.6
+
+[transitions.video_bridge]
+enabled = true
+poster_timestamp_seconds = 0.0
+poster_settle_seconds = 0.8
+
+[transitions.effects]
+fade_overlay = false
+fade_command = ""
+screenshot_bridge = false
+screenshot_command = ""
+quickshell_overlay = false
+quickshell_command = ""
+quickshell_transitions = [
+    "image_to_video",
+    "video_to_image",
+    "video_to_video",
+]
+timeout_seconds = 2.0
+
+[colors]
+video_color_source = "thumbnail"
+
+[resource_mode]
+battery_behavior = "keep"
+high_load_behavior = "keep"
+cpu_load_threshold = 0.85
+gpu_load_threshold = 85.0
+sustained_seconds = 15.0

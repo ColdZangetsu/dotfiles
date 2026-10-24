@@ -1,0 +1,248 @@
+#!/usr/bin/env python3
+# Fondos de Wallpaper Engine (Workshop) integrados con wallmux.
+#
+# Steam/Wallpaper Engine solo se usan para descargar; los fondos los dibuja
+# linux-wallpaperengine. Por cada monitor:
+#   1. Se saca una imagen fija del fondo (poster) y se pone con wallmux. Eso
+#      detiene el video que hubiera, dispara el hook de colores de Caelestia y
+#      deja guardado algo ligero para cuando wallmux restaure al iniciar.
+#   2. Encima se arranca linux-wallpaperengine.
+# Cuando eliges otro fondo en wallmux, el hook before_set llama a
+# "wallmux-we stop {monitor}" y se cierra el de Wallpaper Engine.
+# La pausa (modo juego / pantalla completa) la hace wallmux-modo-juego
+# congelando los procesos guardados en el archivo de estado.
+import argparse
+import json
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+STEAM = Path.home() / ".local/share/Steam/steamapps"
+WORKSHOP = STEAM / "workshop/content/431960"
+ASSETS = STEAM / "common/wallpaper_engine/assets"
+STATE = Path.home() / ".local/state/wallmux-we/state.json"
+CACHE = Path.home() / ".cache/wallmux-we"
+# Copias de fondos con capas que linux-wallpaperengine dibuja mal ya ocultas
+# (se hacen con ~/.local/share/wallmux-we/patch-wallpaper.py)
+PATCHED = Path.home() / ".local/share/wallmux-we/patched"
+WALLMUXCTL = Path.home() / ".local/bin/wallmuxctl"
+FPS = 30
+
+
+def load_state():
+    try:
+        return json.loads(STATE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def save_state(state):
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    STATE.write_text(json.dumps(state, indent=2))
+
+
+def is_ours(pid):
+    try:
+        return "linux-wallpaper" in Path(f"/proc/{pid}/cmdline").read_text()
+    except OSError:
+        return False
+
+
+def monitors():
+    out = subprocess.run(["hyprctl", "monitors", "-j"], capture_output=True, text=True).stdout
+    return json.loads(out)
+
+
+def resolve_monitors(arg):
+    mons = monitors()
+    if arg == "all":
+        return [m["name"] for m in mons]
+    if arg == "focused":
+        return [m["name"] for m in mons if m.get("focused")][:1]
+    return [arg]
+
+
+def resolve_wallpaper(arg):
+    path = Path(arg).expanduser()
+    if not path.is_dir():
+        path = PATCHED / arg if (PATCHED / arg / "project.json").is_file() else WORKSHOP / arg
+    if not (path / "project.json").is_file():
+        sys.exit(f"No encontré el fondo «{arg}». ¿Ya te suscribiste y terminó de bajar?")
+    return path
+
+
+def title(path):
+    try:
+        return json.loads((path / "project.json").read_text(encoding="utf-8-sig")).get("title", path.name)
+    except (OSError, ValueError):
+        return path.name
+
+
+def poster(path):
+    """Imagen fija del fondo para wallmux y los colores de Caelestia."""
+    CACHE.mkdir(parents=True, exist_ok=True)
+    out = CACHE / f"{path.name}.png"
+    if out.is_file():
+        return out
+    # Primero una captura real renderizada (mejor calidad que la vista previa)
+    try:
+        subprocess.run(
+            ["linux-wallpaperengine", "--assets-dir", str(ASSETS), "--silent",
+             "--screenshot", str(out), str(path)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=40,
+        )
+    except subprocess.TimeoutExpired:
+        pass
+    if out.is_file() and out.stat().st_size > 0:
+        return out
+    # Si no, el primer cuadro de la vista previa de la Workshop
+    previews = sorted(path.glob("preview.*"))
+    if previews:
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-i", str(previews[0]), "-frames:v", "1", str(out)],
+            check=False,
+        )
+    if out.is_file():
+        return out
+    sys.exit("No pude sacar una imagen del fondo para los colores.")
+
+
+def extra_args(path):
+    """Opciones extra por fondo, en <carpeta del fondo>/wallmux-we.json: {"args": [...]}"""
+    try:
+        return json.loads((path / "wallmux-we.json").read_text()).get("args", [])
+    except (OSError, ValueError):
+        return []
+
+
+def launch(monitor, path):
+    CACHE.mkdir(parents=True, exist_ok=True)
+    log = open(CACHE / f"{monitor}.log", "w")
+    proc = subprocess.Popen(
+        ["linux-wallpaperengine", "--assets-dir", str(ASSETS), "--silent",
+         "--fps", str(FPS), "--disable-mouse",
+         # La pausa en pantalla completa la maneja wallmux-modo-juego (excluye Brave Origin)
+         "--no-fullscreen-pause",
+         # Capa de fondo (como awww/mpvpaper); en "bottom" taparía los widgets del escritorio
+         "--layer", "background",
+         *extra_args(path),
+         "--scaling", "fill", "--screen-root", monitor, "--bg", str(path)],
+        stdout=log, stderr=log, stdin=subprocess.DEVNULL, start_new_session=True,
+    )
+    return proc.pid
+
+
+def stop(monitor, state):
+    entry = state.pop(monitor, None)
+    if entry and is_ours(entry["pid"]):
+        pid = entry["pid"]
+        os.kill(pid, signal.SIGCONT)  # por si estaba pausado
+        os.kill(pid, signal.SIGTERM)
+        for _ in range(20):
+            if not is_ours(pid):
+                break
+            time.sleep(0.1)
+        else:
+            os.kill(pid, signal.SIGKILL)
+
+
+def cmd_set(args):
+    if not shutil.which("linux-wallpaperengine"):
+        sys.exit("Falta linux-wallpaperengine: paru -S linux-wallpaperengine-git")
+    path = resolve_wallpaper(args.fondo)
+    image = poster(path)
+    for mon in resolve_monitors(args.monitor):
+        # Esto dispara el hook before_set (que cierra el WE anterior de este monitor)
+        # y el de colores.
+        subprocess.run([str(WALLMUXCTL), "set", "--monitor", mon, str(image)], check=True,
+                       stdout=subprocess.DEVNULL)
+        state = load_state()
+        stop(mon, state)
+        state[mon] = {"path": str(path), "pid": launch(mon, path)}
+        save_state(state)
+        print(f"{mon}: {title(path)}")
+
+
+def cmd_stop(args):
+    state = load_state()
+    for mon in resolve_monitors(args.monitor) if args.monitor != "all" else list(state):
+        entry = state.get(mon)
+        stop(mon, state)
+        # Si wallmux solo está poniendo el poster de este mismo fondo (al restaurar
+        # al iniciar o tras reiniciarse), no se olvida: restore lo vuelve a arrancar
+        if entry and args.file and Path(args.file) == CACHE / f"{Path(entry['path']).name}.png":
+            state[mon] = entry
+    save_state(state)
+
+
+def wallmux_ready():
+    out = subprocess.run([str(WALLMUXCTL), "state"], capture_output=True, text=True).stdout
+    return "wallmuxd: running" in out and "startup_restore_pending: False" in out
+
+
+def cmd_restore(_args):
+    # Esperar a que wallmux restaure sus fondos; si no, su hook nos cerraría
+    for _ in range(60):
+        if wallmux_ready():
+            break
+        time.sleep(1)
+    time.sleep(2)
+    state = load_state()
+    connected = {m["name"] for m in monitors()}
+    for mon, entry in list(state.items()):
+        if is_ours(entry["pid"]):
+            continue
+        if mon in connected and Path(entry["path"]).is_dir():
+            entry["pid"] = launch(mon, Path(entry["path"]))
+        else:
+            state.pop(mon)
+    save_state(state)
+
+
+def cmd_list(_args):
+    active = {Path(e["path"]).name: m for m, e in load_state().items()}
+    items = sorted((p for p in WORKSHOP.iterdir() if (p / "project.json").is_file()),
+                   key=lambda p: title(p).lower())
+    for p in items:
+        try:
+            kind = json.loads((p / "project.json").read_text(encoding="utf-8-sig")).get("type", "?")
+        except ValueError:
+            kind = "?"
+        mark = f"  [{active[p.name]}]" if p.name in active else ""
+        print(f"{p.name:>12}  {kind.lower():<6}  {title(p)}{mark}")
+
+
+def cmd_state(_args):
+    for mon, e in load_state().items():
+        alive = is_ours(e["pid"])
+        status = "no corre"
+        if alive:
+            st = Path(f"/proc/{e['pid']}/stat").read_text().split(") ")[1][0]
+            status = "pausado" if st == "T" else "corriendo"
+        print(f"{mon}: {title(Path(e['path']))} ({status}, pid {e['pid']})")
+
+
+def main():
+    p = argparse.ArgumentParser(description="Fondos de Wallpaper Engine con wallmux")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("set", help="Poner un fondo (ID de la Workshop o carpeta)")
+    s.add_argument("fondo")
+    s.add_argument("--monitor", "-m", default="focused", help="DP-1, DP-2..., focused o all")
+    s.set_defaults(func=cmd_set)
+    s = sub.add_parser("stop", help="Quitar el fondo de WE de un monitor")
+    s.add_argument("monitor", nargs="?", default="all")
+    s.add_argument("--file", help="Imagen que wallmux va a poner (la pasa el hook before_set)")
+    s.set_defaults(func=cmd_stop)
+    sub.add_parser("restore", help="Volver a arrancar los fondos guardados").set_defaults(func=cmd_restore)
+    sub.add_parser("list", help="Listar fondos descargados").set_defaults(func=cmd_list)
+    sub.add_parser("state", help="Ver qué fondo corre en cada monitor").set_defaults(func=cmd_state)
+    args = p.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

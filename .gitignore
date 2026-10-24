@@ -1,0 +1,3 @@
+*.bak*
+*.antes-restaurar
+__pycache__/

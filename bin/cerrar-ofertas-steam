@@ -1,0 +1,10 @@
+#!/bin/bash
+# Cierra la ventana de ofertas de Steam si aparece en los próximos 60 s (la abre al salir de Big Picture
+# y mantiene a la GPU dibujando sin parar: ~78 W en vez de ~40 W). Lo lanza modo-casa.
+for i in $(seq 60); do
+    for a in $(hyprctl clients -j | jq -r '.[] | select(.class=="steam" and (.title=="Ofertas especiales" or .title=="Special Offers")) | .address'); do
+        hyprctl dispatch "hl.dsp.window.close({window=\"address:$a\"})" >/dev/null
+        exit 0
+    done
+    sleep 1
+done

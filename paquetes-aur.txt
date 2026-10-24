@@ -1,0 +1,9 @@
+caelestia-cli
+caelestia-firefox-theme
+caelestia-shell
+darkly-bin
+equibop-bin
+linux-wallpaperengine-git
+papirus-folders
+qtengine
+quickshell-git

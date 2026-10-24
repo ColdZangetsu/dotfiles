@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Selector de pantalla de xdg-desktop-portal-hyprland (custom_picker_binary en xdph.conf).
+# En modo trabajo no hay nadie para elegir: Steam (-pipewire) y lo demás reciben solo el
+# monitor virtual STREAM, sin token (si guardaran el ASUS, en modo trabajo está apagado y no captura).
+# En casa se usa el selector normal.
+if [[ -e "$XDG_RUNTIME_DIR/modo-trabajo" ]]; then
+    echo "[SELECTION]/screen:STREAM"
+else
+    exec /usr/bin/hyprland-share-picker "$@"
+fi

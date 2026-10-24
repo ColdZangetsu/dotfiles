@@ -1,0 +1,36 @@
+#!/usr/bin/python3 -I
+# Nero 2026-10-07: deja /Linux y /Windows antes del bloque generado ("Opciones avanzadas").
+import sys
+F = "/boot/limine.conf"
+MANUALES = ("/Linux", "/Windows")
+lines = open(F, encoding="utf-8").read().split("\n")
+# trocear en bloques de nivel superior (líneas que empiezan con "/" sin indentar y no "//")
+inicio = [i for i, l in enumerate(lines) if l.startswith("/") and not l.startswith("//")]
+manual = {}
+quitar = set()
+for n, i in enumerate(inicio):
+    nombre = lines[i].strip()
+    if nombre in MANUALES:
+        fin = inicio[n + 1] if n + 1 < len(inicio) else len(lines)
+        # no comerse el "comment: machine-id" del siguiente bloque
+        while fin > i + 1 and lines[fin - 1].startswith("comment: machine-id"):
+            fin -= 1
+        bloque = lines[i:fin]
+        while bloque and not bloque[-1].strip():
+            bloque.pop()
+        manual[nombre] = bloque
+        quitar.update(range(i, fin))
+mid = next((i for i, l in enumerate(lines) if l.startswith("comment: machine-id")), None)
+if mid is None or len(manual) != len(MANUALES):
+    sys.exit(0)
+if max(quitar) < mid:
+    sys.exit(0)  # ya está en orden
+resto = [l for i, l in enumerate(lines) if i not in quitar]
+mid = next(i for i, l in enumerate(resto) if l.startswith("comment: machine-id"))
+nuevo = resto[:mid]
+for nombre in MANUALES:
+    nuevo += manual[nombre] + [""]
+nuevo += resto[mid:]
+texto = "\n".join(nuevo).rstrip("\n") + "\n"
+open(F + ".tmp", "w", encoding="utf-8").write(texto)
+import os; os.replace(F + ".tmp", F)

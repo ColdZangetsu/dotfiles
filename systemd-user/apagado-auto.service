@@ -1,0 +1,12 @@
+[Unit]
+Description=Apagado automático tras 1 h sin uso (aviso por WhatsApp de Nero)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/apagado-auto
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,0 +1,86 @@
+{
+  "appearance": {
+    "transparency": {
+      "enabled": true
+    },
+    "font": {
+      "workspaces": "Yuji Boku"
+    }
+  },
+  "launcher": {
+    "favouriteApps": [
+      "claude",
+      "youtube",
+      "crunchyroll"
+    ]
+  },
+  "bar": {
+    "workspaces": {
+      "specialWorkspaceIcons": [
+        {
+          "name": "claude",
+          "icon": "smart_toy"
+        }
+      ],
+      "shown": 3,
+      "displayType": "Text",
+      "label": "",
+      "occupiedLabel": "",
+      "activeLabel": ""
+    },
+    "tray": {
+      "iconSubs": [
+        {
+          "id": "steam",
+          "image": "file:///home/ovi/.config/caelestia/steam-tray-white.png"
+        },
+        {
+          "id": "title:Battle.net",
+          "image": "file:///home/ovi/.config/caelestia/battlenet-tray-white.png"
+        },
+        {
+          "id": "webapp-youtube",
+          "image": "file:///home/ovi/.config/caelestia/youtube-tray-white.png"
+        },
+        {
+          "id": "webapp-crunchyroll",
+          "image": "file:///home/ovi/.config/caelestia/crunchyroll-tray-white.png"
+        },
+        {
+          "id": "equibop",
+          "image": "file:///home/ovi/.config/caelestia/discord-tray-white.png"
+        }
+      ]
+    },
+    "excludedScreens": [
+      "STREAM"
+    ]
+  },
+  "background": {
+    "wallpaperEnabled": false
+  },
+  "general": {
+    "logo": "/home/ovi/.config/caelestia/nero.png",
+    "apps": {
+      "terminal": [
+        "kitty"
+      ]
+    },
+    "idle": {
+      "timeouts": [
+        {
+          "timeout": 180,
+          "idleAction": "lock"
+        },
+        {
+          "timeout": 300,
+          "idleAction": "dpms off",
+          "returnAction": "dpms on"
+        }
+      ]
+    }
+  },
+  "lock": {
+    "recolourLogo": false
+  }
+}
