@@ -8,8 +8,8 @@ RemainAfterExit=yes
 ExecStart=%h/.local/bin/govee esperar 90
 ExecStart=%h/.local/bin/govee on
 ExecStart=%h/.local/bin/govee fondo
-ExecStop=%h/.local/bin/govee color ff0000
-ExecStop=%h/.local/bin/govee brillo 100
+# Si existe %t/govee-no-tocar (lo crea `apagar-pc sin-luces` desde Zangetsu) no se tocan las luces al apagar
+ExecStop=/bin/sh -c 'test -e %t/govee-no-tocar || { %h/.local/bin/govee color ff0000; %h/.local/bin/govee brillo 100; }'
 TimeoutStartSec=120
 
 [Install]
