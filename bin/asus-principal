@@ -1,0 +1,8 @@
+#!/bin/sh
+# Marca el ASUS como monitor principal para apps X11/Wine (juegos con Proton),
+# así los juegos abren ahí y ofrecen sus 280 Hz. Busca el ASUS por modelo, no por puerto.
+for i in $(seq 1 20); do
+    puerto=$(hyprctl monitors -j | jq -r '.[] | select(.description | contains("XG27ACDMS")) | .name')
+    [ -n "$puerto" ] && xrandr --output "$puerto" --primary 2>/dev/null && exit 0
+    sleep 1
+done

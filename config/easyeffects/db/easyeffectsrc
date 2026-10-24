@@ -1,0 +1,22 @@
+[Presets]
+lastLoadedInputPreset=Micro limpio
+
+[StreamInputs]
+inputDevice=alsa_input.usb-C-Media_Electronics_Inc._Amazon_USB_Streaming_Mic-00.analog-stereo
+mostUsedPresets=Micro limpio
+plugins=rnnoise#0,gate#0,compressor#0,limiter#0
+usedPresets=Micro limpio:6
+visiblePage=pluginsPage
+visiblePlugin=rnnoise#0
+
+[StreamOutputs]
+blocklist=Brave
+outputDevice=alsa_output.usb-BTD_600_BTD_600_E7E27A414B26B6AB3C08-02.analog-stereo
+
+[Window]
+height=1398
+visiblePage=inputPage
+width=1228
+
+[Main]
+processAllOutputs=false

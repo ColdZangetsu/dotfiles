@@ -1,0 +1,7 @@
+[Unit]
+Description=Reaplica colores por monitor a Caelestia si se actualizó
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 5
+ExecStart=%h/.local/share/caelestia-permon/update.sh

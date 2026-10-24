@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Apagado automático (pedido 2026-10-23): si la PC lleva 1 h sin usarse, Nero avisa por WhatsApp
+# "la apago en 10 min"; si el usuario contesta "no la apagues" (Nero en Zangetsu corre
+# `ssh pc nero-pc 'apagado-auto cancelar'`) no se apaga hasta que vuelva a usarla.
+# Zangetsu la vuelve a prender con prender-pc (Wake-on-LAN).
+#   apagado-auto            el vigilante (lo corre apagado-auto.service)
+#   apagado-auto cancelar   no apagar hasta el próximo uso de teclado/mouse/stream
+#   apagado-auto estado     qué ve el vigilante ahorita
+# "Sin usarse" = sin teclado/mouse (sin-entrada, ~/Nero/apagado-auto: ignora inhibidores como Brave
+# con audio, así la música no cuenta; en modo trabajo cuenta el control del stream) y,
+# durante los últimos 15 min: sin stream al iPad (NVENC), sin juego abierto, sin descarga
+# (> 1 MB/s), sin CPU ocupada (> 15 %) y sin Claude trabajando (transcripts .jsonl).
+# Si el aviso de WhatsApp no sale (Zangetsu caído), NO apaga.
+ESTADO=$XDG_RUNTIME_DIR/apagado-auto
+INACTIVA=$ESTADO/inactiva       # lo crea sin-entrada tras INACTIVO_S sin entrada; lo borra al volver
+CANCELADO=$ESTADO/cancelado
+INACTIVO_S=${INACTIVO_S:-3600}
+TRANQUILA_S=${TRANQUILA_S:-900}                 # cuánto deben llevar las excepciones sin pasar
+AVISO_S=${AVISO_S:-600}
+BOT=http://ZANGETSU_IP:47123/enviar
+mkdir -p "$ESTADO"
+
+# PRUEBA=1 (con INACTIVO_S/TRANQUILA_S/AVISO_S cortos): no manda WhatsApp, no apaga y no cuenta a Claude
+whatsapp() { [ -n "$PRUEBA" ] && { echo "$(date +%T) WhatsApp: $1"; return; }; curl -sf -m 30 -X POST "$BOT" --data-binary "$1" >/dev/null; }
+
+# Bytes recibidos (todas las interfaces menos lo/tailscale) y CPU ocupada desde la última llamada
+rx_ant=0; t_ant=0; cpu_ant=(0 0)
+red_y_cpu() {
+    local rx=0 n b
+    while read -r n b _; do
+        [[ $n == lo: || $n == tailscale0: ]] || (( rx += b ))
+    done < <(tail -n +3 /proc/net/dev)
+    read -r _ u ni s idle io irq sirq st _ < /proc/stat
+    local total=$((u+ni+s+idle+io+irq+sirq+st)) ocup=$((u+ni+s+irq+sirq+st))
+    local dt=$(( total - cpu_ant[0] )) t; t=$(date +%s)
+    MBS=$(( rx_ant && t > t_ant ? (rx - rx_ant) / 1048576 / (t - t_ant) : 0 ))
+    CPU=$(( dt > 0 && cpu_ant[0] ? 100 * (ocup - cpu_ant[1]) / dt : 0 ))
+    rx_ant=$rx; t_ant=$t; cpu_ant=($total $ocup)
+}
+
+# Por qué NO está libre (vacío = libre); usa MBS y CPU de la última medición
+ocupada() {
+    local r=()
+    local s; s=$(timeout 5 nvidia-smi --query-gpu=encoder.stats.sessionCount --format=csv,noheader 2>/dev/null)
+    (( ${s:-0} > 0 )) && r+=(stream)
+    pgrep -f 'reaper SteamLaunch' >/dev/null && r+=(juego)
+    hyprctl clients -j 2>/dev/null | jq -e 'any(.[]; .workspace.name=="gaming" and .class!="steam")' >/dev/null && r+=(juego)
+    (( MBS >= 1 )) && r+=(descarga)
+    (( CPU > 15 )) && r+=(cpu)
+    [ -z "$PRUEBA" ] && [ -n "$(find "$HOME"/.claude/projects -name '*.jsonl' -mmin -15 2>/dev/null | head -1)" ] && r+=(claude)
+    echo "${r[*]}"
+}
+
+case "$1" in
+    cancelar)
+        touch "$CANCELADO"; echo "Listo: no se apaga sola hasta que la vuelvas a usar."; exit 0 ;;
+    estado)
+        red_y_cpu; sleep 5; red_y_cpu
+        echo "sin teclado/mouse 1 h: $([ -e "$INACTIVA" ] && echo sí || echo no)"
+        echo "cancelado: $([ -e "$CANCELADO" ] && echo sí || echo no)"
+        echo "ocupada por: $(ocupada)"; exit 0 ;;
+    '') ;;
+    *) echo "uso: apagado-auto [cancelar|estado]"; exit 1 ;;
+esac
+
+rm -f "$INACTIVA" "$CANCELADO"
+"$HOME"/.local/bin/sin-entrada $INACTIVO_S | while read -r l; do
+    case $l in inactiva) touch "$INACTIVA" ;; activa) rm -f "$INACTIVA" "$CANCELADO" ;; esac
+done &
+trap 'pkill -P $$ 2>/dev/null; pkill -x sin-entrada -U "$UID" 2>/dev/null' EXIT
+
+ultimo_ocupada=$(date +%s)
+red_y_cpu
+while sleep ${PASO_S:-60}; do
+    red_y_cpu
+    ahora=$(date +%s)
+    [ -n "$(ocupada)" ] && ultimo_ocupada=$ahora
+    [ -e "$INACTIVA" ] && [ ! -e "$CANCELADO" ] && (( ahora - ultimo_ocupada >= TRANQUILA_S )) || continue
+
+    whatsapp "💤 La PC lleva 1 h sin usarse, la apago en 10 min. Si no quieres, dime \"no la apagues\"." || continue
+    fin=$(( ahora + AVISO_S )); motivo=
+    while (( $(date +%s) < fin )); do
+        sleep 30
+        red_y_cpu
+        [ -e "$CANCELADO" ] && { motivo=cancelado; break; }
+        [ -e "$INACTIVA" ] || { motivo=usada; break; }
+        o=$(ocupada); [ -n "$o" ] && { motivo=$o; break; }
+    done
+    case "$motivo" in
+        '')        whatsapp "Apagando la PC 😴 (para prenderla: \"prende la PC\")"
+                   [ -n "$PRUEBA" ] && exit 0
+                   sudo -n /usr/local/bin/reinicio-remoto apagar; exit 0 ;;
+        cancelado) ;;   # Nero ya le contestó
+        usada)     whatsapp "Ya no la apago, la volviste a usar 👍" ;;
+        *)         whatsapp "Ya no la apago: se puso a hacer algo ($motivo)." ;;
+    esac
+    ultimo_ocupada=$(date +%s)
+done

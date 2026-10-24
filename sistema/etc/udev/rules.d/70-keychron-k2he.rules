@@ -1,0 +1,2 @@
+# Keychron K2 HE: acceso al canal VIA (luz del teclado) para el usuario con sesión activa
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3434", ATTRS{idProduct}=="0e20", TAG+="uaccess"

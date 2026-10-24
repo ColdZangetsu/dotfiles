@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+# Pinta el borde de cada ventana con los colores del monitor donde está,
+# usando las paletas por monitor de Caelestia:
+#   ~/.local/state/caelestia/schemes/<monitor>.json  (si existe)
+#   ~/.local/state/caelestia/scheme.json             (global, DP-1)
+# Escucha los eventos de Hyprland y se actualiza cuando cambian las paletas.
+import json
+import os
+import socket
+import subprocess
+import time
+from pathlib import Path
+
+STATE = Path.home() / ".local/state/caelestia"
+GLOBAL = STATE / "scheme.json"
+SCHEMES = STATE / "schemes"
+# Igual que activeWindowBorderColour / inactiveWindowBorderColour de variables.lua
+ACTIVE = "rgba({primary}e6)"
+INACTIVE = "rgba({onSurfaceVariant}11)"
+# Eventos tras los que hay que revisar todas las ventanas
+# El ASUS usa un tono oscuro (rojo vino) del color principal en vez del pastel
+# que da Material en modo oscuro; sigue el tono del fondo si cambia.
+OSCURO = ("ASUSTek COMPUTER INC XG27ACDMS",)
+OSCURO_CHROMA, OSCURO_TONO = 41, 26  # con el fondo de Makima da ~#6b2622
+EVENTS = ("openwindow", "movewindow", "moveworkspace", "monitoradded", "monitorremoved",
+          "configreloaded")
+
+
+def hyprctl_json(what):
+    out = subprocess.run(["hyprctl", what, "-j"], capture_output=True, text=True).stdout
+    try:
+        return json.loads(out)
+    except ValueError:
+        return []
+
+
+def load_colours(path):
+    try:
+        return json.loads(path.read_text())["colours"]
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def palette_files():
+    files = [GLOBAL] + sorted(SCHEMES.glob("*.json"))
+    stamp = []
+    for f in files:
+        try:
+            stamp.append((str(f), f.stat().st_mtime_ns))
+        except OSError:
+            pass
+    return tuple(stamp)
+
+
+def oscuro(hexa):
+    from materialyoucolor.hct import Hct
+    h = Hct.from_int(int("ff" + hexa, 16))
+    return "%06x" % (Hct.from_hct(h.hue, max(h.chroma, OSCURO_CHROMA), OSCURO_TONO).to_int() & 0xFFFFFF)
+
+
+class Painter:
+    def __init__(self):
+        self.applied = {}  # address -> (active, inactive)
+        self.stamp = None
+
+    def colours_for(self, monitor, desc=""):
+        c = load_colours(SCHEMES / f"{monitor}.json") or load_colours(GLOBAL)
+        if not c:
+            return None
+        if desc.startswith(OSCURO):
+            c = dict(c, primary=oscuro(c["primary"]))
+        return ACTIVE.format(**c), INACTIVE.format(**c)
+
+    def paint_all(self, force=False):
+        stamp = palette_files()
+        if stamp != self.stamp:
+            self.stamp, force = stamp, True
+        if force:
+            self.applied.clear()
+        mons = {m["id"]: m["name"] for m in hyprctl_json("monitors")}
+        descs = {m["name"]: m["description"] for m in hyprctl_json("monitors")}
+        cache, cmds, alive = {}, [], set()
+        for w in hyprctl_json("clients"):
+            addr, mon = w["address"], mons.get(w["monitor"])
+            alive.add(addr)
+            if mon is None:
+                continue
+            if mon not in cache:
+                cache[mon] = self.colours_for(mon, descs.get(mon, ""))
+            cols = cache[mon]
+            if not cols or self.applied.get(addr) == cols:
+                continue
+            for prop, val in zip(("active_border_color", "inactive_border_color"), cols):
+                cmds.append(f'dispatch hl.dsp.window.set_prop({{ window = "address:{addr}", '
+                            f'prop = "{prop}", value = "{val}" }})')
+            self.applied[addr] = cols
+        for gone in set(self.applied) - alive:
+            del self.applied[gone]
+        if cmds:
+            subprocess.run(["hyprctl", "--batch", " ; ".join(cmds)], capture_output=True)
+
+
+def socket_path():
+    sig = os.environ["HYPRLAND_INSTANCE_SIGNATURE"]
+    run = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    return f"{run}/hypr/{sig}/.socket2.sock"
+
+
+def main():
+    painter = Painter()
+    painter.paint_all(force=True)
+    while True:
+        try:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.connect(socket_path())
+            sock.settimeout(2)
+            buf = b""
+            while True:
+                try:
+                    data = sock.recv(65536)
+                except socket.timeout:
+                    if palette_files() != painter.stamp:  # cambió alguna paleta
+                        painter.paint_all()
+                    continue
+                if not data:
+                    break
+                buf += data
+                *lines, buf = buf.split(b"\n")
+                names = {l.split(b">>")[0].decode(errors="ignore") for l in lines}
+                if any(n.startswith(EVENTS) for n in names):
+                    time.sleep(0.05)
+                    painter.paint_all(force="configreloaded" in names)
+        except OSError:
+            time.sleep(2)
+
+
+if __name__ == "__main__":
+    main()

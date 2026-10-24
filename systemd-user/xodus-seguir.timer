@@ -1,0 +1,10 @@
+[Unit]
+Description=Revisar Xodus una vez al día
+
+[Timer]
+OnCalendar=*-*-* 19:00
+OnBootSec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

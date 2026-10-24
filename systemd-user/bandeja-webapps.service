@@ -1,0 +1,11 @@
+[Unit]
+Description=Íconos de bandeja para las apps web de Brave Origin (YouTube, Crunchyroll)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/bandeja-webapps
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target

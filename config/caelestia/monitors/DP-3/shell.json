@@ -1,0 +1,54 @@
+{
+  "bar": {
+    "persistent": true,
+    "entries": [
+      {
+        "id": "workspaces",
+        "enabled": true
+      },
+      {
+        "id": "spacer",
+        "enabled": true
+      },
+      {
+        "id": "tray",
+        "enabled": true
+      },
+      {
+        "id": "clock",
+        "enabled": true
+      },
+      {
+        "id": "statusIcons",
+        "enabled": true
+      },
+      {
+        "id": "power",
+        "enabled": true
+      }
+    ],
+    "workspaces": {
+      "shown": 2
+    },
+    "tray": {
+      "compact": true
+    },
+    "statusIcons": [
+      {
+        "id": "audio",
+        "enabled": true
+      },
+      {
+        "id": "network",
+        "enabled": true
+      },
+      {
+        "id": "bluetooth",
+        "enabled": true
+      }
+    ],
+    "clock": {
+      "showIcon": false
+    }
+  }
+}

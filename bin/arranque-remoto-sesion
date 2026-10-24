@@ -1,0 +1,10 @@
+#!/bin/bash
+# Al iniciar Hyprland (hypr-user.lua): si la PC entró sola por un reinicio remoto,
+# pone el modo trabajo (que termina bloqueando la pantalla).
+F=/run/reinicio-remoto/activo
+[ -e "$F" ] || exit 0
+rm -f "$F"
+sleep 8   # que Caelestia, Sunshine y Tailscale terminen de arrancar
+"$HOME/.local/bin/modo-trabajo" on
+# WhatsApp "Ya todo listo con el reinicio" cuando todo levantó (o qué falta a los 10 min)
+systemd-run --user --collect --unit=aviso-listo "$HOME/.local/bin/aviso-listo" >/dev/null 2>&1

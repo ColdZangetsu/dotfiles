@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Equibop
+Comment=Equibop autostart script
+Exec=/usr/lib/electron43/electron /usr/lib/equibop/app.asar "env ELECTRON_OZONE_PLATFORM_HINT=auto" 
+StartupNotify=false
+Terminal=false
+Icon=equibop

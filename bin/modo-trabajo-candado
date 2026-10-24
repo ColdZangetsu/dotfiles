@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Solo en modo trabajo: teclado, mouse y touch físicos apagados todo el tiempo (el iPad usa los
+# virtuales: libvirtualhid de Steam Link y los "passthrough" de Sunshine/Moonlight).
+# Antes (respaldo .bak-bloqueo-gpu) la PC se quedaba con la pantalla bloqueada mientras nadie
+# jugaba, pero el bloqueo de Caelestia dejaba la GPU en P1 (~26-33 W en vez de ~2 W, medido
+# 2026-10-21); el usuario eligió sin bloqueo + entradas físicas apagadas.
+# Para volver: "modo casa" por WhatsApp/iPad, o reiniciar (el estado vive en /run).
+ESTADO="$XDG_RUNTIME_DIR/modo-trabajo"
+VIRTUALES='^(libvirtualhid|power-button|sleep-button)|passthrough|sunshine'
+declare -A apagados
+
+entradas_fisicas() {
+    hyprctl devices -j | jq -r '(.mice[], .keyboards[], .touch[]?) | .name' | grep -v -i -E "$VIRTUALES"
+}
+prender_todo() {
+    for d in "${!apagados[@]}"; do hyprctl eval "hl.device({name=\"$d\", enabled=true})" >/dev/null; done
+}
+trap 'prender_todo; kill $tecla 2>/dev/null' EXIT
+trap 'exit 0' TERM INT
+
+# Espera a que el modo trabajo se acomode (apagarlos al instante dejaba la GPU en P1, 2026-10-21)
+sleep 30
+# Con el teclado apagado Super+Inicio no llega a Hyprland: modo-casa-tecla lo lee directo del kernel
+~/.local/bin/modo-casa-tecla &
+tecla=$!
+# Revisa seguido: lo que se conecte después (audífonos BT, etc.) también se apaga
+while [ -e "$ESTADO" ]; do
+    while read -r d; do
+        [ -n "$d" ] && [ -z "${apagados[$d]}" ] || continue
+        hyprctl eval "hl.device({name=\"$d\", enabled=false})" >/dev/null && apagados[$d]=1
+    done < <(entradas_fisicas)
+    sleep 3
+done

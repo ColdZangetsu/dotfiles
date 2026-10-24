@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+"""Sigue el proyecto Xodus (Xbox / Game Pass en Linux) en GitHub.
+
+  xodus            muestra lo nuevo desde la última revisión
+  xodus --todo     muestra los últimos commits aunque ya los hayas visto
+  xodus --notificar  modo timer: solo manda notificación si hay algo nuevo
+"""
+import json
+import os
+import subprocess
+import sys
+import urllib.request
+from datetime import datetime, timezone
+
+ORG = "xodus-gaming"
+REPOS = {
+    "xodus": "app principal",
+    "xgameruntime": "runtime de Xbox (lo que falta para lanzar juegos)",
+    "wine": "su Wine parchado",
+    "Proton": "su Proton",
+}
+ESTADO = os.path.expanduser("~/.local/state/xodus-seguir.json")
+URL = "https://github.com/xodus-gaming/xodus"
+
+
+def api(path):
+    req = urllib.request.Request(
+        f"https://api.github.com/{path}",
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "xodus-seguir"},
+    )
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return json.load(r)
+
+
+def fecha(iso):
+    d = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone()
+    return d.strftime("%d/%m %H:%M")
+
+
+def main():
+    todo = "--todo" in sys.argv
+    notificar = "--notificar" in sys.argv
+    try:
+        estado = json.load(open(ESTADO))
+    except (OSError, ValueError):
+        estado = {}
+
+    lineas, resumen = [], []
+    for repo, desc in REPOS.items():
+        try:
+            commits = api(f"repos/{ORG}/{repo}/commits?per_page=10")
+            releases = api(f"repos/{ORG}/{repo}/releases?per_page=3")
+        except Exception as e:  # sin red o límite de la API
+            lineas.append(f"\n\033[31m{repo}: no se pudo consultar ({e})\033[0m")
+            continue
+
+        visto = estado.get(repo, {}).get("commit")
+        nuevos = []
+        for c in commits:
+            if c["sha"] == visto and not todo:
+                break
+            nuevos.append(c)
+        if todo:
+            nuevos = commits[:5]
+
+        rel_visto = estado.get(repo, {}).get("release")
+        rel = releases[0] if releases else None
+        rel_nuevo = rel and rel["tag_name"] != rel_visto
+
+        if nuevos or rel_nuevo:
+            lineas.append(f"\n\033[1;35m{repo}\033[0m — {desc}")
+            if rel_nuevo:
+                lineas.append(f"  \033[1;32m★ RELEASE {rel['tag_name']}\033[0m ({fecha(rel['published_at'])}) {rel['html_url']}")
+                resumen.append(f"★ {repo} {rel['tag_name']}")
+            for c in nuevos[:8]:
+                msg = c["commit"]["message"].splitlines()[0][:90]
+                lineas.append(f"  {fecha(c['commit']['committer']['date'])}  {msg}")
+            if len(nuevos) > 8:
+                lineas.append(f"  … y {len(nuevos) - 8} más")
+            if nuevos and visto and not todo:
+                resumen.append(f"{repo}: {len(nuevos)} cambio(s)")
+
+        if commits:
+            estado[repo] = {"commit": commits[0]["sha"], "release": rel["tag_name"] if rel else None}
+
+    primera_vez = not os.path.exists(ESTADO)
+    os.makedirs(os.path.dirname(ESTADO), exist_ok=True)
+    json.dump(estado, open(ESTADO, "w"), indent=1)
+
+    if notificar:
+        if resumen and not primera_vez:
+            subprocess.run(["notify-send", "-a", "Xodus", "-i", "input-gaming",
+                            "Novedades en Xodus", "\n".join(resumen) + "\nCorre `xodus` para ver el detalle"])
+        return
+
+    if not lineas:
+        print("Xodus: nada nuevo desde la última revisión.  (xodus --todo para ver lo último)")
+    else:
+        print("Xodus — Xbox / Game Pass en Linux" + ("  (últimos commits)" if todo else "  (lo nuevo)"))
+        print("\n".join(lineas))
+    print(f"\n{URL}")
+
+
+if __name__ == "__main__":
+    main()

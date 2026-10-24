@@ -1,0 +1,2 @@
+com.overwolf.curseforge
+sh.cider.Cider

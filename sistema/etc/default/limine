@@ -1,0 +1,6 @@
+ESP_PATH="/boot"
+KERNEL_CMDLINE[default]+="quiet nowatchdog splash rw rootflags=subvol=/@ root=UUID=41735f63-686e-45d9-ba4c-009b155a162a"
+BOOT_ORDER="*"
+TARGET_OS_NAME="Opciones avanzadas"
+ENABLE_LIMINE_FALLBACK=no
+FIND_BOOTLOADERS=no

@@ -1,0 +1,322 @@
+#!/home/ovi/.local/share/pipx/venvs/wallmux/bin/python
+# Selector con miniaturas para los fondos de Wallpaper Engine.
+# Por debajo usa wallmux-we, así que respeta las copias parcheadas, la pausa
+# del modo juego y los colores de Caelestia.
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+from PySide6.QtCore import QObject, QProcess, QRunnable, QSize, Qt, QThreadPool, Signal
+from PySide6.QtGui import QIcon, QImage, QImageReader, QMovie, QPixmap
+from PySide6.QtWidgets import (
+    QApplication, QComboBox, QHBoxLayout, QLabel, QLineEdit, QListView, QListWidget,
+    QListWidgetItem, QMainWindow, QPushButton, QVBoxLayout, QWidget,
+)
+
+WORKSHOP = Path.home() / ".local/share/Steam/steamapps/workshop/content/431960"
+STATE = Path.home() / ".local/state/wallmux-we/state.json"
+THUMBS = Path.home() / ".cache/wallmux-we/thumbs"
+SCHEME = Path.home() / ".local/state/caelestia/scheme.json"
+WALLMUX_WE = str(Path.home() / ".local/bin/wallmux-we")
+THUMB = QSize(256, 144)
+TYPES = {"scene": "Escena", "video": "Video", "web": "Web"}
+
+
+def load_project(path):
+    try:
+        return json.loads((path / "project.json").read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return {}
+
+
+def load_state():
+    try:
+        return json.loads(STATE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def monitors():
+    try:
+        out = subprocess.run(["hyprctl", "monitors", "-j"], capture_output=True, text=True).stdout
+        return json.loads(out)
+    except (OSError, ValueError):
+        return []
+
+
+def preview_of(path):
+    previews = sorted(path.glob("preview.*"))
+    return previews[0] if previews else None
+
+
+def stylesheet():
+    c = {"primary": "f9b6ac", "onPrimary": "61332d", "surface": "130d0b",
+         "surfaceContainer": "221715", "surfaceContainerHigh": "291d1b",
+         "onSurface": "f9e0dc", "outline": "84716e"}
+    try:
+        c.update(json.loads(SCHEME.read_text())["colours"])
+    except (OSError, ValueError, KeyError):
+        pass
+    return f"""
+    QWidget {{ background: #{c['surface']}; color: #{c['onSurface']}; font-size: 10pt; }}
+    QLineEdit, QComboBox {{
+        background: #{c['surfaceContainerHigh']}; border: 1px solid #{c['outline']};
+        border-radius: 8px; padding: 6px 10px; }}
+    QComboBox QAbstractItemView {{ background: #{c['surfaceContainerHigh']};
+        selection-background-color: #{c['primary']}; selection-color: #{c['onPrimary']}; }}
+    QPushButton {{ background: #{c['surfaceContainerHigh']}; border: 1px solid #{c['outline']};
+        border-radius: 8px; padding: 7px 14px; }}
+    QPushButton:hover {{ border-color: #{c['primary']}; }}
+    QPushButton#apply {{ background: #{c['primary']}; color: #{c['onPrimary']};
+        border: none; font-weight: bold; }}
+    QPushButton:disabled {{ color: #{c['outline']}; }}
+    QListWidget {{ background: #{c['surfaceContainer']}; border: none; border-radius: 12px; padding: 8px; }}
+    QListWidget::item {{ border-radius: 10px; padding: 6px; }}
+    QListWidget::item:hover {{ background: #{c['surfaceContainerHigh']}; }}
+    QListWidget::item:selected {{ background: #{c['primary']}; color: #{c['onPrimary']}; }}
+    QLabel#title {{ font-size: 14pt; font-weight: bold; }}
+    QLabel#dim {{ color: #{c['outline']}; }}
+    QLabel#preview {{ background: #{c['surfaceContainer']}; border-radius: 12px; }}
+    QScrollBar:vertical {{ background: transparent; width: 8px; }}
+    QScrollBar::handle:vertical {{ background: #{c['outline']}; border-radius: 4px; min-height: 30px; }}
+    QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; }}
+    """
+
+
+class ThumbSignals(QObject):
+    done = Signal(str, QImage)
+
+
+class ThumbTask(QRunnable):
+    """Primer cuadro de la vista previa, recortado a 16:9 y guardado en caché."""
+
+    def __init__(self, wid, path, signals):
+        super().__init__()
+        self.wid, self.path, self.signals = wid, path, signals
+
+    def run(self):
+        cached = THUMBS / f"{self.wid}.png"
+        img = QImage(str(cached)) if cached.is_file() else QImage()
+        if img.isNull():
+            prev = preview_of(self.path)
+            if prev:
+                img = QImageReader(str(prev)).read()
+            if not img.isNull():
+                img = img.scaled(THUMB, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+                x = (img.width() - THUMB.width()) // 2
+                y = (img.height() - THUMB.height()) // 2
+                img = img.copy(x, y, THUMB.width(), THUMB.height())
+                THUMBS.mkdir(parents=True, exist_ok=True)
+                img.save(str(cached))
+        self.signals.done.emit(self.wid, img)
+
+
+class Window(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Fondos de Wallpaper Engine")
+        self.resize(1400, 860)
+        self.items = {}
+        self.proc = None
+        self.movie = None
+        self.pool = QThreadPool.globalInstance()
+        self.signals = ThumbSignals()
+        self.signals.done.connect(self.on_thumb)
+
+        root = QWidget()
+        self.setCentralWidget(root)
+        outer = QHBoxLayout(root)
+        outer.setContentsMargins(14, 14, 14, 14)
+        outer.setSpacing(14)
+
+        # Izquierda: filtros y cuadrícula
+        left = QVBoxLayout()
+        bar = QHBoxLayout()
+        self.search = QLineEdit(placeholderText="Buscar…")
+        self.search.textChanged.connect(self.apply_filter)
+        self.kind = QComboBox()
+        self.kind.addItem("Todos los tipos", "")
+        for key, label in TYPES.items():
+            self.kind.addItem(label, key)
+        self.kind.currentIndexChanged.connect(self.apply_filter)
+        bar.addWidget(self.search, 1)
+        bar.addWidget(self.kind)
+        left.addLayout(bar)
+
+        self.grid = QListWidget()
+        self.grid.setViewMode(QListView.IconMode)
+        self.grid.setIconSize(THUMB)
+        self.grid.setGridSize(QSize(THUMB.width() + 24, THUMB.height() + 58))
+        self.grid.setResizeMode(QListView.Adjust)
+        self.grid.setMovement(QListView.Static)
+        self.grid.setUniformItemSizes(True)
+        self.grid.setWordWrap(True)
+        self.grid.setSpacing(4)
+        self.grid.currentItemChanged.connect(self.on_select)
+        self.grid.itemActivated.connect(lambda _: self.apply())
+        left.addWidget(self.grid, 1)
+        outer.addLayout(left, 1)
+
+        # Derecha: vista previa animada y controles
+        side = QVBoxLayout()
+        side.setSpacing(10)
+        self.preview = QLabel(objectName="preview", alignment=Qt.AlignCenter)
+        self.preview.setFixedSize(420, 236)
+        side.addWidget(self.preview)
+        self.title = QLabel(objectName="title", wordWrap=True)
+        self.meta = QLabel(objectName="dim", wordWrap=True)
+        side.addWidget(self.title)
+        side.addWidget(self.meta)
+        side.addSpacing(8)
+
+        side.addWidget(QLabel("Monitor"))
+        self.monitor = QComboBox()
+        for m in monitors():
+            label = f"{m['name']}  ({m['width']}×{m['height']})"
+            self.monitor.addItem(label, m["name"])
+            if m.get("focused"):
+                self.monitor.setCurrentIndex(self.monitor.count() - 1)
+        self.monitor.addItem("Todos los monitores", "all")
+        side.addWidget(self.monitor)
+
+        self.apply_btn = QPushButton("Poner fondo", objectName="apply")
+        self.apply_btn.clicked.connect(self.apply)
+        self.stop_btn = QPushButton("Quitar de este monitor")
+        self.stop_btn.clicked.connect(self.stop)
+        side.addWidget(self.apply_btn)
+        side.addWidget(self.stop_btn)
+        side.addStretch(1)
+
+        self.active = QLabel(objectName="dim", wordWrap=True)
+        self.status = QLabel(wordWrap=True)
+        side.addWidget(self.active)
+        side.addWidget(self.status)
+        sidew = QWidget()
+        sidew.setLayout(side)
+        sidew.setFixedWidth(420)
+        outer.addWidget(sidew)
+
+        self.load()
+
+    # --- datos ---------------------------------------------------------------
+    def load(self):
+        entries = []
+        for path in WORKSHOP.iterdir() if WORKSHOP.is_dir() else []:
+            proj = load_project(path)
+            if proj:
+                entries.append((proj.get("title") or path.name, path, proj))
+        entries.sort(key=lambda e: e[0].lower())
+        placeholder = QPixmap(THUMB)
+        placeholder.fill(Qt.transparent)
+        for name, path, proj in entries:
+            it = QListWidgetItem(QIcon(placeholder), name)
+            it.setData(Qt.UserRole, {"id": path.name, "path": str(path), "title": name,
+                                     "type": str(proj.get("type", "")).lower()})
+            it.setTextAlignment(Qt.AlignHCenter | Qt.AlignTop)
+            it.setToolTip(name)
+            self.grid.addItem(it)
+            self.items[path.name] = it
+            self.pool.start(ThumbTask(path.name, path, self.signals))
+        self.refresh_active()
+        if self.grid.count():
+            self.grid.setCurrentRow(0)
+
+    def on_thumb(self, wid, img):
+        it = self.items.get(wid)
+        if it and not img.isNull():
+            it.setIcon(QIcon(QPixmap.fromImage(img)))
+
+    def refresh_active(self):
+        state = load_state()
+        on = {}
+        for mon, e in state.items():
+            on.setdefault(Path(e["path"]).name, []).append(mon)
+        for wid, it in self.items.items():
+            d = it.data(Qt.UserRole)
+            mons = on.get(wid)
+            it.setText(f"{d['title']}\n● {', '.join(sorted(mons))}" if mons else d["title"])
+        lines = [f"{m}: {self.items[Path(e['path']).name].data(Qt.UserRole)['title']}"
+                 for m, e in sorted(state.items()) if Path(e["path"]).name in self.items]
+        self.active.setText("Ahora:\n" + "\n".join(lines) if lines else "")
+
+    def apply_filter(self):
+        text = self.search.text().lower()
+        kind = self.kind.currentData()
+        for it in self.items.values():
+            d = it.data(Qt.UserRole)
+            ok = (not text or text in d["title"].lower() or text in d["id"]) and \
+                 (not kind or d["type"] == kind)
+            it.setHidden(not ok)
+
+    # --- selección ------------------------------------------------------------
+    def on_select(self, it, _prev):
+        if self.movie:
+            self.movie.stop()
+            self.movie = None
+        if not it:
+            return
+        d = it.data(Qt.UserRole)
+        self.title.setText(d["title"])
+        self.meta.setText(f"{TYPES.get(d['type'], d['type'] or '?')} · ID {d['id']}")
+        prev = preview_of(Path(d["path"]))
+        size = self.preview.size()
+        if prev and prev.suffix.lower() == ".gif":
+            self.movie = QMovie(str(prev))
+            self.movie.setCacheMode(QMovie.CacheAll)
+            self.movie.jumpToFrame(0)
+            fs = self.movie.currentImage().size()
+            self.movie.setScaledSize(fs.scaled(size, Qt.KeepAspectRatio))
+            self.preview.setMovie(self.movie)
+            self.movie.start()
+        elif prev:
+            self.preview.setPixmap(QPixmap(str(prev)).scaled(size, Qt.KeepAspectRatio,
+                                                             Qt.SmoothTransformation))
+        else:
+            self.preview.clear()
+
+    # --- acciones -------------------------------------------------------------
+    def run(self, args, msg):
+        if self.proc:
+            return
+        self.status.setText(msg)
+        self.apply_btn.setEnabled(False)
+        self.stop_btn.setEnabled(False)
+        self.proc = QProcess(self)
+        self.proc.setProcessChannelMode(QProcess.MergedChannels)
+        self.proc.finished.connect(self.on_done)
+        self.proc.start(WALLMUX_WE, args)
+
+    def on_done(self, code, _status):
+        out = bytes(self.proc.readAll()).decode(errors="replace").strip()
+        self.proc = None
+        self.apply_btn.setEnabled(True)
+        self.stop_btn.setEnabled(True)
+        self.status.setText("Listo ✓" if code == 0 else f"Falló:\n{out[-400:]}")
+        self.refresh_active()
+
+    def apply(self):
+        it = self.grid.currentItem()
+        if not it:
+            return
+        d = it.data(Qt.UserRole)
+        mon = self.monitor.currentData()
+        self.run(["set", d["id"], "-m", mon], f"Poniendo «{d['title']}» en {mon}…")
+
+    def stop(self):
+        mon = self.monitor.currentData()
+        self.run(["stop", mon], f"Quitando el fondo de {mon}…")
+
+
+def main():
+    app = QApplication(sys.argv)
+    app.setApplicationName("wallmux-we-gui")
+    app.setDesktopFileName("wallmux-we-gui")
+    app.setStyleSheet(stylesheet())
+    w = Window()
+    w.show()
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

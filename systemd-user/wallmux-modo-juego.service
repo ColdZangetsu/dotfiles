@@ -1,0 +1,11 @@
+[Unit]
+Description=Pausar fondos de wallmux en modo juego de Caelestia
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/wallmux-modo-juego
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target

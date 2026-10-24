@@ -1,0 +1,49 @@
+{
+  "toggles": {
+    "claude": {
+      "claude": {
+        "enable": true,
+        "match": [
+          {
+            "class": "claude"
+          }
+        ],
+        "command": [
+          "uwsm",
+          "app",
+          "--",
+          "claude.desktop"
+        ],
+        "move": true
+      }
+    },
+    "sysmon": {
+      "btop": {
+        "command": [
+          "kitty",
+          "--class",
+          "btop",
+          "-T",
+          "btop",
+          "fish",
+          "-C",
+          "exec btop"
+        ]
+      }
+    },
+    "communication": {
+      "discord": {
+        "enable": true,
+        "match": [
+          {
+            "class": "equibop"
+          }
+        ],
+        "command": [
+          "equibop"
+        ],
+        "move": true
+      }
+    }
+  }
+}

@@ -1,0 +1,103 @@
+#!/bin/bash
+# Modo trabajo: deja la PC "como muerta" para jugar desde el iPad (Moonlight / Steam Link)
+#   modo-trabajo on      apaga monitores, fondos y luces; crea el monitor virtual del iPad
+#   modo-trabajo off     todo vuelve a la normalidad (también: modo-casa)
+#   modo-trabajo estado
+#
+# Con los monitores apagados (DPMS) Hyprland no deja capturar la pantalla, por eso se
+# transmite un monitor virtual (headless) del mismo tamaño que el ASUS.
+# Steam vive en el escritorio "gaming": se mueve al virtual para que los juegos abran ahí.
+
+VIRTUAL=STREAM
+MODO_IPAD="1920x1080@60"   # 1080p (2026-10-19): el stream ya llegaba al iPad en 1080p y así la GPU trabaja menos; antes 2560x1440 (respaldo .bak-1440)
+REAL=(DP-1 DP-2 DP-3)
+PRINCIPAL=DP-2   # ASUS: donde se juega normalmente
+SUNSHINE_CONF=~/.config/sunshine/sunshine.conf
+SUNSHINE_UNIT=app-dev.lizardbyte.app.Sunshine
+ESTADO="$XDG_RUNTIME_DIR/modo-trabajo"   # en /run: se borra solo al reiniciar
+
+dsp() { hyprctl dispatch "$1" >/dev/null; }
+# Bloquea la pantalla (Caelestia). Reintenta porque al iniciar sesión el shell tarda en arrancar.
+# Steam Link sigue mostrando el juego con la pantalla bloqueada; Moonlight muestra el bloqueo.
+bloquear() {
+    for _ in $(seq 15); do
+        qs -c caelestia ipc call lock lock >/dev/null 2>&1
+        [ "$(qs -c caelestia ipc call lock isLocked 2>/dev/null)" = true ] && return 0
+        sleep 2
+    done
+    return 1
+}
+sunshine_monitor() {
+    sed -i "/^output_name *=/d" "$SUNSHINE_CONF"
+    echo "output_name = $1" >> "$SUNSHINE_CONF"
+    systemctl --user reset-failed "$SUNSHINE_UNIT" 2>/dev/null
+    systemctl --user restart "$SUNSHINE_UNIT"
+}
+
+on() {
+    touch "$ESTADO"
+    ~/.local/bin/govee off >/dev/null 2>&1 &
+    ~/.local/bin/teclado-luz off >/dev/null 2>&1
+
+    hyprctl monitors -j | jq -e --arg v "$VIRTUAL" 'any(.[]; .name == $v)' >/dev/null \
+        || hyprctl output create headless "$VIRTUAL" >/dev/null
+    hyprctl eval "hl.monitor({output=\"$VIRTUAL\", mode=\"$MODO_IPAD\", position=\"5120x0\", scale=1.0})" >/dev/null
+    dsp "hl.dsp.workspace.move({workspace=\"gaming\", monitor=\"$VIRTUAL\"})"
+    dsp "hl.dsp.focus({monitor=\"$VIRTUAL\"})"
+    sunshine_monitor "$VIRTUAL"
+    # Borra los permisos guardados de captura (Steam -pipewire) para que el selector elija STREAM
+    systemctl --user restart xdg-desktop-portal-hyprland
+
+    # Fondos cerrados (liberan VRAM; pausados la seguirían ocupando)
+    for m in "${REAL[@]}"; do ~/.local/bin/wallmuxctl stop-video --monitor "$m" >/dev/null 2>&1; done
+
+    # Sin bloqueo ni apagado por inactividad, y que el mouse/teclado del iPad no prenda los monitores
+    qs -c caelestia ipc call idleInhibitor enable >/dev/null 2>&1
+    hyprctl eval 'hl.config({misc={mouse_move_enables_dpms=false, key_press_enables_dpms=false}})' >/dev/null
+    for m in "${REAL[@]}"; do dsp "hl.dsp.dpms({action=\"disable\", monitor=\"$m\"})"; done
+    dsp "hl.dsp.focus({monitor=\"$VIRTUAL\"})"   # al apagar los monitores el foco se regresa al ASUS
+    dsp "hl.dsp.focus({workspace=\"name:gaming\"})" # y que se vea Steam, no un escritorio vacío
+    # Estilo SteamOS: Big Picture a pantalla completa en STREAM (se apaga solo al salir del modo)
+    systemctl --user is-active -q modo-trabajo-steamos || systemd-run --user --unit=modo-trabajo-steamos --collect "$HOME/.local/bin/modo-trabajo-steamos" >/dev/null 2>&1
+    wait
+    # Sin bloqueo: con la pantalla bloqueada la GPU no bajaba de P1 (~26-33 W vs ~2 W, 2026-10-21).
+    # En su lugar teclado/mouse físicos apagados todo el modo trabajo (modo-trabajo-candado)
+    systemctl --user is-active -q modo-trabajo-candado || systemd-run --user --unit=modo-trabajo-candado --collect "$HOME/.local/bin/modo-trabajo-candado" >/dev/null 2>&1
+    echo "Modo trabajo activado"
+}
+
+off() {
+    # Aviso a mamá "Ya llegué a casa" (2-9 am, una vez por noche) solo si de verdad salía del modo trabajo
+    [ -e "$ESTADO" ] && systemd-run --user --collect --unit=aviso-llegada "$HOME/.local/bin/aviso-llegada" >/dev/null 2>&1
+    hyprctl eval 'hl.config({misc={mouse_move_enables_dpms=true, key_press_enables_dpms=true}})' >/dev/null
+    for m in "${REAL[@]}"; do dsp "hl.dsp.dpms({action=\"enable\", monitor=\"$m\"})"; done
+    qs -c caelestia ipc call idleInhibitor disable >/dev/null 2>&1
+
+    dsp "hl.dsp.workspace.move({workspace=\"gaming\", monitor=\"$PRINCIPAL\"})"
+    dsp "hl.dsp.focus({monitor=\"$PRINCIPAL\"})"
+    hyprctl output remove "$VIRTUAL" >/dev/null 2>&1
+    sunshine_monitor "$PRINCIPAL"
+    systemctl --user restart xdg-desktop-portal-hyprland   # olvida el permiso de captura de STREAM
+
+    ~/.local/bin/wallmuxctl restore >/dev/null 2>&1
+    (~/.local/bin/govee on && ~/.local/bin/govee fondo) >/dev/null 2>&1
+    ~/.local/bin/teclado-luz on >/dev/null 2>&1
+    rm -f "$ESTADO"
+    systemctl --user stop modo-trabajo-steamos 2>/dev/null
+    systemctl --user stop modo-trabajo-candado 2>/dev/null   # al salir vuelve a prender teclado/mouse
+    # Por si el candado no alcanzó a prenderlos: todo teclado/mouse/touch encendido
+    hyprctl devices -j | jq -r '(.mice[], .keyboards[], .touch[]?) | .name' | while read -r d; do
+        hyprctl eval "hl.device({name=\"$d\", enabled=true})" >/dev/null
+    done
+    steam steam://close/bigpicture >/dev/null 2>&1 &
+    systemd-run --user --collect --unit=cerrar-ofertas-steam "$HOME/.local/bin/cerrar-ofertas-steam" >/dev/null 2>&1
+    echo "Modo casa: todo de vuelta"
+}
+
+case "$1" in
+    on) on ;;
+    off) off ;;
+    estado) [ -e "$ESTADO" ] && echo "trabajo" || echo "casa" ;;
+    bloquear) ;;   # lo llama Sunshine al terminar una sesión de Moonlight; ya no bloquea (ver on)
+    *) case "$(basename "$0")" in modo-casa) off ;; *) echo "uso: modo-trabajo on|off|estado"; exit 1 ;; esac ;;
+esac

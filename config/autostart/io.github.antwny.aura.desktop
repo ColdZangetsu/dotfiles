@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Aura
+GenericName=Live Wallpaper Manager
+Comment=Animated live wallpaper manager for COSMIC Desktop
+TryExec=/home/ovi/.local/bin/aura
+Exec=/home/ovi/.local/bin/aura --hidden
+Icon=io.github.antwny.aura
+Terminal=false
+StartupNotify=false
+X-GNOME-Autostart-enabled=true
+X-Cosmic-Autostart-enabled=true
+X-GNOME-Autostart-Delay=2
+Categories=Utility;DesktopSettings;

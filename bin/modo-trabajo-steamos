@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Solo en modo trabajo: mientras alguien stremea (Steam Link o Moonlight), deja Steam
+# Big Picture a pantalla completa en STREAM, para que en el iPad se vea como SteamOS
+# (sin barra ni marco de Caelestia). Si hay un juego abierto en "gaming" no toca nada;
+# al cerrarlo, Big Picture vuelve a pantalla completa. Termina solo al salir del modo trabajo.
+# Sin nadie conectado por ESPERA s, manda Steam a la bandeja: Big Picture (o la ventana
+# normal de Steam) abierta deja la GPU en P1 ~29 W en vez de P8 ~4.5 W (medido 2026-10-22).
+ESTADO="$XDG_RUNTIME_DIR/modo-trabajo"
+BP_TITULO='^(Modo Big Picture de Steam|Steam Big Picture Mode)$'
+ESPERA=180
+ultimo_abrir=0
+ultimo_stream=0
+
+while [ -e "$ESTADO" ]; do
+    clientes=$(hyprctl clients -j 2>/dev/null) || { sleep 2; continue; }
+    ahora=$(date +%s)
+    # Steam Link y Sunshine codifican con NVENC: sesiones > 0 = alguien está conectado
+    streams=$(timeout 5 nvidia-smi --query-gpu=encoder.stats.sessionCount --format=csv,noheader 2>/dev/null)
+    (( ${streams:-0} > 0 )) && ultimo_stream=$ahora
+    # Steam tiene que estar corriendo (aunque sea en la bandeja) para que Steam Link lo encuentre
+    if ! pgrep -x steam >/dev/null && (( ahora - ultimo_abrir > 30 )); then
+        # SIN -pipewire (decidido 10-20): así Steam Link graba solo la ventana de Big Picture, como app, no el monitor
+        # Borra el permiso de captura guardado (de casa apunta al ASUS, que aquí está
+        # apagado -> pantalla negra); el selector automático le dará STREAM
+        sed -i '/"DesktopCaptureRestoreToken"/d' "$HOME"/.local/share/Steam/userdata/*/config/localconfig.vdf
+        hyprctl dispatch 'hl.dsp.exec_cmd("steam -silent")' >/dev/null
+        ultimo_abrir=$ahora
+    fi
+    # Si Steam arrancó después del modo trabajo, "gaming" se creó en un monitor real -> a STREAM
+    if hyprctl workspaces -j 2>/dev/null | jq -e 'any(.[]; .name=="gaming" and .monitor!="STREAM")' >/dev/null; then
+        hyprctl dispatch 'hl.dsp.workspace.move({workspace="gaming", monitor="STREAM"})' >/dev/null
+        hyprctl dispatch 'hl.dsp.focus({workspace="name:gaming"})' >/dev/null
+    fi
+    # ¿Hay algo en "gaming" que no sea Steam? (un juego) -> no estorbar
+    juego=$(jq -r '[.[] | select(.workspace.name=="gaming" and .class!="steam")] | length' <<<"$clientes")
+    if [ "$juego" != 0 ]; then
+        # Otra ventana en STREAM (Brave, terminal, un juego): Big Picture sin pantalla completa
+        # para que no la tape (2026-10-22: lo que se abría quedaba debajo de Steam)
+        bp=$(jq -r --arg t "$BP_TITULO" '.[] | select(.class=="steam" and (.title|test($t)) and .fullscreen!=0) | .address' <<<"$clientes" | head -1)
+        [ -n "$bp" ] && hyprctl dispatch "hl.dsp.window.fullscreen({ mode = \"fullscreen\", action = \"unset\", window = \"address:$bp\" })" >/dev/null
+    else
+        bp=$(jq -r --arg t "$BP_TITULO" '.[] | select(.class=="steam" and (.title|test($t))) | "\(.address) \(.fullscreen)"' <<<"$clientes" | head -1)
+        if (( ahora - ultimo_stream >= ESPERA )); then
+            # Nadie conectado: cierra Big Picture y luego toda ventana de Steam (incluida
+            # "Ofertas especiales", que sale al cerrar BP) -> Steam queda en la bandeja
+            if [ -n "$bp" ]; then
+                hyprctl dispatch 'hl.dsp.exec_cmd("steam steam://close/bigpicture")' >/dev/null
+                sleep 5
+                clientes=$(hyprctl clients -j 2>/dev/null)
+            fi
+            for a in $(jq -r '.[] | select(.class=="steam") | .address' <<<"$clientes"); do
+                hyprctl dispatch "hl.dsp.window.close({window=\"address:$a\"})" >/dev/null
+            done
+        elif [ -z "$bp" ]; then
+            if (( ${streams:-0} > 0 && ahora - ultimo_abrir > 30 )); then
+                hyprctl dispatch 'hl.dsp.exec_cmd("steam steam://open/bigpicture")' >/dev/null
+                ultimo_abrir=$ahora
+            fi
+        else
+            read -r addr fs <<<"$bp"
+            if [ "$fs" = 0 ]; then
+                hyprctl dispatch "hl.dsp.window.fullscreen({ mode = \"fullscreen\", action = \"set\", window = \"address:$addr\" })" >/dev/null
+            fi
+        fi
+    fi
+    sleep 2
+done

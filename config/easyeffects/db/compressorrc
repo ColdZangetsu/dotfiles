@@ -1,0 +1,7 @@
+[sie][Compressor#0]
+attack=10
+hpfFrequency=80
+hpfMode=1
+makeup=4
+ratio=3
+threshold=-20

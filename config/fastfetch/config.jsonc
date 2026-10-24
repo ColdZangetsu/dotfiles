@@ -1,0 +1,52 @@
+// Bienvenida de la terminal estilo "TERMINAL ONLINE", con Nero de logo.
+// Respaldo de la anterior: config.jsonc.bak-nero
+{
+    "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+    "logo": {
+        "type": "kitty-direct",
+        "source": "~/.config/caelestia/nero.png",
+        "width": 18,
+        "height": 9,
+        "padding": { "top": 2, "left": 2, "right": 3 }
+    },
+    "display": {
+        "separator": "",
+        "key": { "width": 14 },
+        "color": { "keys": "red", "output": "white" },
+        "constants": [
+            "\u001b[90m─\u001b[0m \u001b[37m┌───────────────────────────────────────────┐\u001b[0m",
+            "\u001b[90m─\u001b[0m \u001b[37m└───────────────────────────────────────────┘\u001b[0m"
+        ]
+    },
+    "modules": [
+        {
+            "type": "custom",
+            "format": "\u001b[31m■ \u001b[37m󰊠 󰊠 󰊠 \u001b[33m󰮯\u001b[90m · · · · \u001b[37mTERMINAL ONLINE\u001b[0m"
+        },
+        { "type": "custom", "format": "{$1}" },
+        { "type": "os",       "key": "  󰣇 OS",       "format": "{pretty-name}" },
+        { "type": "kernel",   "key": "  󰌽 Kernel",   "format": "{release}" },
+        { "type": "packages", "key": "  󰏖 Packages", "format": "{pacman} (pacman)" },
+        { "type": "display",  "key": "  󰍹 Display",  "format": "{width}x{height} @ {refresh-rate}Hz" },
+        { "type": "wm",       "key": "  󰕮 WM",       "format": "{pretty-name}" },
+        { "type": "terminal", "key": "  󰆍 Terminal", "format": "{pretty-name}" },
+        { "type": "shell",    "key": "  󰞷 Shell",    "format": "{pretty-name}" },
+        { "type": "custom", "format": "{$2}" },
+        "break",
+        {
+            "type": "title",
+            "key": "  󰁔 ",
+            "keyColor": "yellow",
+            "format": "{user-name}@{host-name}",
+            "color": { "user": "cyan", "at": "white", "host": "cyan" }
+        },
+        { "type": "custom", "format": "{$1}" },
+        { "type": "cpu",    "key": "  󰻠 CPU",    "keyColor": "cyan", "format": "{name}" },
+        { "type": "gpu",    "key": "  󰢮 GPU",    "keyColor": "cyan", "format": "{name}" },
+        { "type": "memory", "key": "  󰍛 Memory", "keyColor": "cyan" },
+        { "type": "uptime", "key": "  󰥔 Uptime", "keyColor": "cyan" },
+        { "type": "custom", "format": "{$2}" },
+        "break",
+        { "type": "custom", "format": "  {#30}⏺  {#31}⏺  {#32}⏺  {#33}⏺  {#34}⏺  {#35}⏺  {#36}⏺  {#37}⏺ {#}" }
+    ]
+}

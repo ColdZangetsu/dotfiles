@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+# Pausa los fondos de wallmux mientras el modo juego de Caelestia está activo,
+# o cuando hay una ventana en pantalla completa que no sea de las excluidas (Brave Origin).
+#
+# Caelestia no avisa cuando cambia el modo juego, pero al activarlo apaga
+# animations:enabled en Hyprland (es lo mismo que usa la propia shell para saber
+# si está activo). Mientras esté apagado, mantenemos vivo un proceso llamado
+# "wallmux-pausa", que está en [inhibition].process_names de wallmux, así que
+# wallmux pausa todos los videos aunque no haya nada en pantalla completa.
+#
+# La regla de pantalla completa propia de wallmux ([inhibition].fullscreen) está
+# apagada porque no permite excluir apps; este script la reemplaza.
+#
+# También congela los fondos de Wallpaper Engine (wallmux-we), que wallmux no
+# conoce: se pausan con lo mismo que wallmux (modo juego, pantalla completa o
+# cualquier proceso de [inhibition].process_names, p. ej. juegos con wine).
+# Si lo que está en pantalla completa es un juego (Proton/wine), los cierra (WE y
+# también los videos de wallmux) en
+# vez de pausarlos para liberar su VRAM, y los vuelve a abrir al salir.
+import ctypes
+import json
+import os
+import signal
+import subprocess
+import time
+import tomllib
+from pathlib import Path
+
+MARKER_NAME = b"wallmux-pausa"  # máx. 15 caracteres (nombre de proceso en Linux)
+INTERVAL = 2.0
+# Clases de ventana que NO pausan los fondos al estar en pantalla completa
+FULLSCREEN_EXCLUDED = {"brave-origin", "claude"}
+PR_SET_NAME = 15
+WALLMUX_CONFIG = Path.home() / ".config/wallmux/config.toml"
+WE_STATE = Path.home() / ".local/state/wallmux-we/state.json"
+WALLMUX_STATE = Path.home() / ".local/state/wallmux/state.json"
+WALLMUXCTL = Path.home() / ".local/bin/wallmuxctl"
+
+
+def game_mode_on():
+    try:
+        out = subprocess.run(
+            ["hyprctl", "getoption", "animations:enabled", "-j"],
+            capture_output=True, text=True, timeout=5,
+        ).stdout
+        return json.loads(out).get("bool") is False
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return False  # Si Hyprland no responde, no pausamos
+
+
+def fullscreen_app_open():
+    try:
+        out = subprocess.run(
+            ["hyprctl", "clients", "-j"], capture_output=True, text=True, timeout=5,
+        ).stdout
+        return any(
+            c.get("fullscreen") and c.get("class") not in FULLSCREEN_EXCLUDED
+            # Apps web de Brave Origin (YouTube, Crunchyroll...): brave-<sitio>-Default
+            and not c.get("class", "").startswith("brave-")
+            for c in json.loads(out)
+        )
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return False
+
+
+def screens_off():
+    # Monitores apagados por inactividad (DPMS): nadie ve los fondos -> pausarlos
+    try:
+        out = subprocess.run(
+            ["hyprctl", "monitors", "-j"], capture_output=True, text=True, timeout=5,
+        ).stdout
+        real = [m for m in json.loads(out) if not m.get("name", "").startswith("STREAM")]
+        return bool(real) and all(m.get("dpmsStatus") is False for m in real)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return False
+
+
+def game_fullscreen():
+    try:
+        out = subprocess.run(
+            ["hyprctl", "clients", "-j"], capture_output=True, text=True, timeout=5,
+        ).stdout
+        return any(
+            c.get("fullscreen") and is_game_class(c.get("class", ""))
+            for c in json.loads(out)
+        )
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return False
+
+
+def is_game_class(cls):
+    cls = cls.lower()
+    return cls.startswith("steam_app") or cls.endswith(".exe") or cls == "gamescope"
+
+
+def inhibiting_process_running():
+    try:
+        names = set(tomllib.loads(WALLMUX_CONFIG.read_text())["inhibition"]["process_names"])
+    except (OSError, KeyError, ValueError):
+        return False
+    names.discard(MARKER_NAME.decode())
+    for comm in Path("/proc").glob("[0-9]*/comm"):
+        try:
+            if comm.read_text().strip() in names:
+                return True
+        except OSError:
+            pass
+    return False
+
+
+def set_we_paused(paused):
+    try:
+        entries = json.loads(WE_STATE.read_text()).values()
+    except (OSError, ValueError):
+        return
+    for entry in entries:
+        pid = entry.get("pid")
+        try:
+            if "linux-wallpaper" in Path(f"/proc/{pid}/cmdline").read_text():
+                os.kill(pid, signal.SIGSTOP if paused else signal.SIGCONT)
+        except (OSError, TypeError):
+            pass
+
+
+def close_we():
+    try:
+        entries = json.loads(WE_STATE.read_text()).values()
+    except (OSError, ValueError):
+        return
+    for entry in entries:
+        pid = entry.get("pid")
+        try:
+            if "linux-wallpaper" in Path(f"/proc/{pid}/cmdline").read_text():
+                os.kill(pid, signal.SIGCONT)
+                os.kill(pid, signal.SIGTERM)
+        except (OSError, TypeError):
+            pass
+
+
+def restore_we():
+    # En su propio scope de systemd: si no, al reiniciar este servicio se los lleva
+    subprocess.Popen(["systemd-run", "--user", "--scope", "--quiet", "--unit",
+                      f"wallmux-we-{int(time.time())}",
+                      str(Path.home() / ".local/bin/wallmux-we"), "restore"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     start_new_session=True)
+
+
+def close_videos():
+    # Los videos de wallmux (mpvpaper) pausados siguen ocupando VRAM: con un juego
+    # en pantalla completa se cierran y luego se restauran con `wallmuxctl restore`
+    try:
+        monitors = json.loads(WALLMUX_STATE.read_text())["monitors"]
+    except (OSError, ValueError, KeyError):
+        return False
+    closed = False
+    for name, entry in monitors.items():
+        pid = entry.get("pid")
+        if entry.get("wallpaper_type") != "video" or not pid:
+            continue
+        try:
+            os.kill(pid, signal.SIGCONT)  # wallmux los tiene en SIGSTOP
+        except (OSError, TypeError):
+            pass
+        subprocess.run([str(WALLMUXCTL), "stop-video", "--monitor", name],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
+        closed = True
+    return closed
+
+
+def restore_videos():
+    # En modo trabajo (modo-trabajo on) los fondos se quedan cerrados; modo-casa los restaura
+    if (Path(os.environ.get("XDG_RUNTIME_DIR", "/run/user/1000")) / "modo-trabajo").exists():
+        return
+    subprocess.Popen([str(WALLMUXCTL), "restore"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     start_new_session=True)
+
+
+def start_marker():
+    pid = os.fork()
+    if pid == 0:
+        ctypes.CDLL(None).prctl(PR_SET_NAME, MARKER_NAME, 0, 0, 0)
+        # Se muere solo si este script se muere
+        ctypes.CDLL(None).prctl(1, signal.SIGTERM, 0, 0, 0)  # PR_SET_PDEATHSIG
+        while True:
+            signal.pause()
+    return pid
+
+
+def stop_marker(pid):
+    try:
+        os.kill(pid, signal.SIGTERM)
+        os.waitpid(pid, 0)
+    except (ProcessLookupError, ChildProcessError):
+        pass
+
+
+def main():
+    marker = None
+
+    we_closed = False
+    videos_closed = False
+    game_gone_since = None
+
+    def cleanup(*_):
+        if we_closed:
+            restore_we()
+        if videos_closed:
+            restore_videos()
+        set_we_paused(False)
+        if marker:
+            stop_marker(marker)
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGTERM, cleanup)
+    signal.signal(signal.SIGINT, cleanup)
+
+    while True:
+        on = game_mode_on() or fullscreen_app_open() or screens_off()
+        if on and marker is None:
+            marker = start_marker()
+        elif not on and marker is not None:
+            stop_marker(marker)
+            marker = None
+        if game_fullscreen():
+            game_gone_since = None
+            if not we_closed:
+                close_we()
+                we_closed = True
+            # Revisar siempre: algo (p. ej. modo-casa) puede reabrir los videos con el juego abierto
+            if close_videos():
+                videos_closed = True
+        elif we_closed:
+            # Esperar un poco por si el juego solo salió un momento de pantalla completa
+            game_gone_since = game_gone_since or time.monotonic()
+            if time.monotonic() - game_gone_since > 10:
+                restore_we()
+                if videos_closed:
+                    restore_videos()
+                we_closed = False
+                videos_closed = False
+                game_gone_since = None
+        if not we_closed:
+            set_we_paused(on or inhibiting_process_running())
+        time.sleep(INTERVAL)
+
+
+if __name__ == "__main__":
+    main()
