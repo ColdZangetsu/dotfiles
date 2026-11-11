@@ -22,7 +22,7 @@ StyledRect {
     }
     implicitHeight: input.implicitHeight + Tokens.padding.small
 
-    color: Colours.of(QsWindow.window ?? this).tPalette.m3surfaceContainer
+    color: Qt.rgba(20 / 255, 4 / 255, 8 / 255, 0.55)
     radius: Tokens.rounding.full
 
     focus: true

@@ -1,0 +1,20 @@
+#!/bin/bash
+# Hace cuánto se usó el teclado/mouse (2026-10-25, para nero_casa.py en Zangetsu: si el iPhone
+# duerme el Wi-Fi pero la PC se está usando, el usuario sigue en casa → no poner modo trabajo).
+#   ultima-entrada            vigilante (ultima-entrada.service): sin-entrada 60 → $ARCHIVO
+#   ultima-entrada segundos   imprime los segundos sin teclado/mouse (sale 1 si no hay vigilante)
+# El archivo dice "activa" (se usó hace <60 s) o "inactiva <epoch de la última entrada>".
+ARCHIVO=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ultima-entrada
+if [ "$1" = segundos ]; then
+    read -r estado ts < "$ARCHIVO" 2>/dev/null || exit 1
+    pgrep -u "$UID" -f "ultima-entrada$" >/dev/null || exit 1
+    [ "$estado" = activa ] && echo 0 || echo $(( $(date +%s) - ts ))
+    exit 0
+fi
+echo activa > "$ARCHIVO"   # arranca con la sesión: el usuario acaba de entrar
+"$HOME"/.local/bin/sin-entrada 60 | while read -r l; do
+    case $l in
+        inactiva) echo "inactiva $(( $(date +%s) - 60 ))" > "$ARCHIVO" ;;
+        activa) echo activa > "$ARCHIVO" ;;
+    esac
+done

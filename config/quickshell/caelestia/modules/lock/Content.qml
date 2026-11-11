@@ -9,14 +9,10 @@ RowLayout {
     id: root
 
     required property var lock
-    // Modo trabajo: sin clima/fetch/música/recursos/notificaciones (redibujarlos dejaba la GPU
-    // en P1 con los monitores apagados); quedan el reloj y la contraseña
-    property bool sinWidgets: false
 
     spacing: Tokens.spacing.largeIncreased * 2
 
     ColumnLayout {
-        visible: !root.sinWidgets
         Layout.fillWidth: true
         spacing: Tokens.spacing.medium
 
@@ -42,7 +38,6 @@ RowLayout {
     }
 
     ColumnLayout {
-        visible: !root.sinWidgets
         Layout.fillWidth: true
         spacing: Tokens.spacing.medium
 

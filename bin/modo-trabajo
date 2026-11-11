@@ -36,7 +36,7 @@ sunshine_monitor() {
 
 on() {
     touch "$ESTADO"
-    ~/.local/bin/govee off >/dev/null 2>&1 &
+    ~/.local/bin/govee off --forzar >/dev/null 2>&1 &   # el candado es para la música y el Apple TV, no para dormir/salir (2026-11-09)
     ~/.local/bin/teclado-luz off >/dev/null 2>&1
 
     hyprctl monitors -j | jq -e --arg v "$VIRTUAL" 'any(.[]; .name == $v)' >/dev/null \
@@ -80,7 +80,7 @@ off() {
     systemctl --user restart xdg-desktop-portal-hyprland   # olvida el permiso de captura de STREAM
 
     ~/.local/bin/wallmuxctl restore >/dev/null 2>&1
-    (~/.local/bin/govee on && ~/.local/bin/govee fondo) >/dev/null 2>&1
+    (~/.local/bin/govee on --forzar && ~/.local/bin/govee fondo --forzar) >/dev/null 2>&1   # también con candado (2026-11-09, pedido del usuario)
     ~/.local/bin/teclado-luz on >/dev/null 2>&1
     rm -f "$ESTADO"
     systemctl --user stop modo-trabajo-steamos 2>/dev/null
@@ -89,7 +89,18 @@ off() {
     hyprctl devices -j | jq -r '(.mice[], .keyboards[], .touch[]?) | .name' | while read -r d; do
         hyprctl eval "hl.device({name=\"$d\", enabled=true})" >/dev/null
     done
-    steam steam://close/bigpicture >/dev/null 2>&1 &
+    # el touch del XENEON solo va prendido con el modo música (esconde el mouse en juegos)
+    systemctl --user is-active -q govee-musica || hyprctl eval 'hl.device({name="wch.cn-touchscreen", enabled=false})' >/dev/null
+    # Steam necesita DISPLAY (Xwayland); al arrancar la sesión a veces aún no está y sale
+    # el error "Unable to open a connection to X" → esperar hasta 30 s a que aparezca
+    (
+        for _ in $(seq 30); do
+            [ -n "$DISPLAY" ] && break
+            DISPLAY=$(systemctl --user show-environment | sed -n 's/^DISPLAY=//p'); export DISPLAY
+            [ -n "$DISPLAY" ] && break; sleep 1
+        done
+        steam steam://close/bigpicture >/dev/null 2>&1
+    ) &
     systemd-run --user --collect --unit=cerrar-ofertas-steam "$HOME/.local/bin/cerrar-ofertas-steam" >/dev/null 2>&1
     echo "Modo casa: todo de vuelta"
 }

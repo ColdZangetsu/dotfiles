@@ -5,7 +5,6 @@ import QtQuick.Effects
 import QtMultimedia
 import Quickshell
 import Quickshell.Wayland
-import Quickshell.Io
 import Caelestia.Config
 import qs.components
 import qs.components.images
@@ -181,16 +180,7 @@ WlSessionLockSurface {
 
     // Si el video falla (o no existe) vuelve al fondo normal de Caelestia
     property bool videoFalla: false
-    // En modo trabajo (monitores apagados) sin video: reproducirlo detrás de las pantallas
-    // apagadas dejaba la GPU en P1 (~33 W en vez de ~2 W, medido 2026-10-21)
-    property bool modoTrabajo: false
-    readonly property bool videoFondo: !videoFalla && !modoTrabajo
-
-    FileView {
-        path: Quickshell.env("XDG_RUNTIME_DIR") + "/modo-trabajo"   // lo crea `modo-trabajo on`
-        printErrors: false
-        onLoaded: root.modoTrabajo = true
-    }
+    readonly property bool videoFondo: !videoFalla
 
     Component {
         id: videoBackground
@@ -239,7 +229,7 @@ WlSessionLockSurface {
             id: lockBg
 
             anchors.fill: parent
-            color: Colours.of(QsWindow.window ?? this).palette.m3surface
+            color: "#050203"
             radius: parent.radius
             opacity: Colours.transparency.enabled ? Colours.transparency.base : 1
 
@@ -262,7 +252,6 @@ WlSessionLockSurface {
 
         Content {
             id: content
-            sinWidgets: root.modoTrabajo
 
             anchors.centerIn: parent
             width: (root.screen?.height ?? 0) * Tokens.sizes.lock.heightMult * Tokens.sizes.lock.ratio - Tokens.padding.extraLargeIncreased

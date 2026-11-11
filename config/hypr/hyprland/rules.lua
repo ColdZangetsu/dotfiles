@@ -136,7 +136,7 @@ tagged_rule(system_monitor_tag, { "btop" }, "class")
 tagged_rule(music_player_tag, {
     "feishin|Supersonic|Plexamp",                                  -- Self hosted
     "Spotify",                                                     -- Spotify
-    "Cider",                                                       -- Apple music
+    "[Cc]ider",                                                    -- Apple music (el Flatpak usa "cider")
     "com.github.th-ch.youtube-music|com-maxrave-simpmusic-MainKt", -- YouTube music
 }, "class")
 tagged_rule(music_player_tag, {

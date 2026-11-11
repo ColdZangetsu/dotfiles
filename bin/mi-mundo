@@ -1,0 +1,10 @@
+#!/bin/bash
+# "Mi Mundo": abre Minecraft (Prism, instancia mi-mundo en Compartido) directo en el último mundo jugado. 2026-11-09
+SAVES=/mnt/Compartido/Nero/minecraft-mundo/instancias/mi-mundo/minecraft/saves
+[ -d "$SAVES" ] || { notify-send -i mi-mundo "Mi Mundo" "No encuentro Compartido montado" 2>/dev/null; exit 1; }
+mundo=$(ls -1t "$SAVES"/*/level.dat 2>/dev/null | head -1)
+if [ -n "$mundo" ]; then
+    exec flatpak run org.prismlauncher.PrismLauncher -l mi-mundo -w "$(basename "$(dirname "$mundo")")"
+else
+    exec flatpak run org.prismlauncher.PrismLauncher -l mi-mundo
+fi

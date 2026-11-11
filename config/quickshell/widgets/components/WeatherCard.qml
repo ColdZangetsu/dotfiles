@@ -22,9 +22,9 @@ Card {
                 spacing: 10 * Theme.scale
 
                 Txt {
-                    size: 30
-                    font.weight: Font.Bold
-                    text: Weather.ok ? Weather.temp + "°C" : "--°C"
+                    size: 38
+                    font.family: Theme.titleFont
+                    text: Weather.ok ? Weather.temp + "°" : "--°"
                 }
 
                 ColumnLayout {
@@ -35,6 +35,7 @@ Card {
                         Layout.fillWidth: true
                         elide: Text.ElideRight
                         size: 13
+                        font.weight: Font.Medium
                         text: Weather.desc ? Weather.desc.charAt(0).toUpperCase() + Weather.desc.slice(1) : "Cargando…"
                     }
 
@@ -49,7 +50,7 @@ Card {
             }
 
             RowLayout {
-                Layout.topMargin: 6 * Theme.scale
+                Layout.topMargin: 2 * Theme.scale
                 spacing: 12 * Theme.scale
 
                 Repeater {
@@ -91,6 +92,7 @@ Card {
                     anchors.centerIn: parent
                     size: 22
                     color: Theme.chipText
+                    fill: false
                     text: Weather.icon
                 }
             }

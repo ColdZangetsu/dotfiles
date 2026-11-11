@@ -2,7 +2,7 @@
 Type=Application
 Name=Equibop
 Comment=Equibop autostart script
-Exec=/usr/lib/electron43/electron /usr/lib/equibop/app.asar "env ELECTRON_OZONE_PLATFORM_HINT=auto" 
+Exec=sh -c "sleep 10; exec /usr/lib/electron43/electron /usr/lib/equibop/app.asar"
 StartupNotify=false
 Terminal=false
 Icon=equibop

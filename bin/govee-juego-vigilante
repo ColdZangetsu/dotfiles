@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Prende govee-juego cuando hay un juego abierto y lo apaga al cerrarlo (corre como servicio
+# govee-juego-vigilante.service). No entra con el modo música, el modo trabajo, ni si se apagó con
+# Super+F3 (marca ~/.config/govee/juego-apagado).
+APAGADO=~/.config/govee/juego-apagado
+TRABAJO="$XDG_RUNTIME_DIR/modo-trabajo"
+UNIDAD=govee-juego
+
+# monitor del juego, o nada si no hay: Steam/Proton, gamescope, Minecraft, Wine (.exe)
+monitor_juego() {
+    python3 -c '
+import json, subprocess
+c = json.loads(subprocess.run(["hyprctl", "clients", "-j"], capture_output=True).stdout or b"[]")
+m = {x["id"]: x["name"] for x in json.loads(subprocess.run(["hyprctl", "monitors", "-j"], capture_output=True).stdout or b"[]")}
+for w in c:
+    k = w.get("class", "")
+    if k.startswith("steam_app_") or k == "gamescope" or k.startswith("Minecraft") or k.lower().endswith(".exe"):
+        print(m.get(w["monitor"], "DP-2")); break
+'
+}
+
+while sleep 3; do
+    mon=$(monitor_juego)
+    activo=$(systemctl --user is-active "$UNIDAD")
+    if [ -n "$mon" ] && [ ! -e "$APAGADO" ] && [ ! -e "$TRABAJO" ] && ! systemctl --user is-active -q govee-musica; then
+        [ "$activo" = active ] || systemd-run --user --collect --unit="$UNIDAD" ~/.local/bin/govee-juego "$mon" >/dev/null
+    elif [ "$activo" = active ]; then
+        systemctl --user stop "$UNIDAD"
+    fi
+done

@@ -1,0 +1,6 @@
+[Unit]
+Description=Luces Govee al ritmo de la música
+
+[Service]
+ExecStart=%h/.local/bin/govee-musica
+KillSignal=SIGTERM

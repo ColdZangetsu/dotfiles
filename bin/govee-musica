@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+# Luces Govee al ritmo de la música (Govee LAN API). Mismo script en la PC y en Zangetsu.
+#   govee-musica              escucha la salida de audio y mueve las luces hasta que lo detengan
+#   govee-musica [fuente]     otra fuente de pulse/pipewire (por omisión @DEFAULT_MONITOR@)
+# Al terminar (SIGTERM / Ctrl+C) regresa las luces como estaban: apagadas, o con su color fijo.
+# Ajustes en ~/.config/govee/musica.json (se crea con los valores de abajo).
+import array
+import json
+import math
+import signal
+import socket
+import subprocess
+import sys
+import time
+from collections import deque
+from pathlib import Path
+
+LUCES = Path.home() / ".config/govee/luces.json"
+FIJOS = Path.home() / ".config/govee/fijos.json"
+AJUSTES = Path.home() / ".config/govee/musica.json"
+DEFAULT = {
+    "fps": 12,              # actualizaciones por segundo (la LAN de Govee se atora arriba de ~15)
+    "retraso": 0.20,        # s que se retrasan las luces para ir junto con el Bluetooth
+    "brillo_min": 0.12,     # brillo en silencio / partes suaves (0-1)
+    "destello": "b44cff",   # color hacia el que brillan en cada golpe de bajo
+    "base": "0000ff",       # color base si una luz no tiene color fijo
+    "contraste": 2.2,       # >1 = más diferencia entre partes fuertes y suaves
+    "fuerza": 1.0,          # qué tanto se van al color de destello en un golpe (0-1)
+    "sensibilidad": 1.2,    # golpe = bajo > este múltiplo de su promedio reciente (menos = más golpes)
+}
+RATE = 11025
+
+
+def ajustes():
+    try:
+        return {**DEFAULT, **json.loads(AJUSTES.read_text())}
+    except (OSError, ValueError):
+        AJUSTES.parent.mkdir(parents=True, exist_ok=True)
+        AJUSTES.write_text(json.dumps(DEFAULT, indent=2) + "\n")
+        return dict(DEFAULT)
+
+
+def rgb(h):
+    h = h.lstrip("#")
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def send(ip, cmd, data):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.sendto(json.dumps({"msg": {"cmd": cmd, "data": data}}).encode(), (ip, 4003))
+    s.close()
+
+
+def status(ip):
+    rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    rx.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    rx.bind(("", 4002))
+    rx.settimeout(1.5)
+    try:
+        send(ip, "devStatus", {})
+        return json.loads(rx.recvfrom(4096)[0])["msg"]["data"]
+    except (OSError, ValueError, KeyError):
+        return None
+    finally:
+        rx.close()
+
+
+def color(ip, c):
+    send(ip, "colorwc", {"color": {"r": c[0], "g": c[1], "b": c[2]}, "colorTemInKelvin": 0})
+
+
+def main():
+    CANDADO = __import__("pathlib").Path.home() / ".config/nero/luces-bloqueadas"  # 11-04: candado (luces-bloqueo on/off)
+    if CANDADO.exists():
+        sys.exit(0)
+    cfg = ajustes()
+    luces = json.loads(LUCES.read_text())
+    luces = {n: l for n, l in luces.items() if not l.get("aparte")}  # sin la del clóset
+    try:
+        fijos = json.loads(FIJOS.read_text())
+    except (OSError, ValueError):
+        fijos = {}
+    base = {n: rgb(fijos.get(n, cfg["base"])) for n in luces}
+    flash = rgb(cfg["destello"])
+    antes = {n: status(l["ip"]) for n, l in luces.items()}
+
+    def restaurar(*_):
+        for n, l in luces.items():
+            st = antes.get(n)
+            if st and not st.get("onOff"):
+                send(l["ip"], "turn", {"value": 0})
+            else:
+                color(l["ip"], base[n])
+                if st:
+                    send(l["ip"], "brightness", {"value": st.get("brightness", 100)})
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, restaurar)
+    signal.signal(signal.SIGINT, restaurar)
+    for l in luces.values():
+        send(l["ip"], "turn", {"value": 1})
+        send(l["ip"], "brightness", {"value": 100})
+
+    fuente = sys.argv[1] if len(sys.argv) > 1 else "@DEFAULT_MONITOR@"
+    rec = subprocess.Popen(["parec", "-d", fuente, "--format=s16le", f"--rate={RATE}", "--channels=1",
+                            "--latency-msec=20"], stdout=subprocess.PIPE)
+    bloque = RATE // cfg["fps"]
+    a = 1 - math.exp(-2 * math.pi * 150 / RATE)  # paso-bajas ~150 Hz para el bajo
+    lp = 0.0
+    pico, pico_b, prom_b, nivel, golpe, piso = 1e-3, 1e-3, 0.0, 0.0, 0.0, 0.0
+    cola = deque()
+    ultimo = {}
+    while True:
+        raw = rec.stdout.read(bloque * 2)
+        if not raw:
+            restaurar()
+        x = array.array("h", raw)
+        sq = sq_b = 0.0
+        for v in x:
+            lp += a * (v - lp)
+            sq += v * v
+            sq_b += lp * lp
+        rms = math.sqrt(sq / len(x)) / 32768
+        rms_b = math.sqrt(sq_b / len(x)) / 32768
+        # ganancia automática: lo que importa es qué tan fuerte va respecto a lo reciente, no la rueda
+        pico = max(rms, pico * 0.995, 1e-3)
+        pico_b = max(rms_b, pico_b * 0.995, 1e-3)
+        # piso: lo más bajito reciente (baja rápido, sube lento); el nivel va de piso a pico, así la música
+        # comprimida (que casi siempre va fuerte) también se mueve
+        piso = rms if rms < piso else piso + (rms - piso) * 0.02
+        obj = max(0.0, min(1.0, (rms - piso) / max(pico - piso, 1e-4))) if rms > 0.002 else 0.0
+        nivel = obj if obj > nivel else nivel * 0.75 + obj * 0.25  # sube rápido, baja suave
+        if rms_b / pico_b > 0.45 and rms_b > prom_b * cfg["sensibilidad"] and rms_b > 0.004:
+            golpe = 1.0
+        prom_b = prom_b * 0.9 + rms_b * 0.1
+        brillo = cfg["brillo_min"] + (1 - cfg["brillo_min"]) * nivel ** cfg["contraste"]
+        brillo = max(brillo, golpe)  # en el golpe sube a todo aunque el nivel vaya bajo
+        frame = {}
+        for n in luces:
+            c = tuple(b + (f - b) * golpe * cfg["fuerza"] for b, f in zip(base[n], flash))
+            frame[n] = tuple(min(255, round(v * brillo)) for v in c)
+        golpe *= 0.55
+        cola.append((time.monotonic() + cfg["retraso"], frame))
+        while cola and cola[0][0] <= time.monotonic():
+            _, fr = cola.popleft()
+            for n, c in fr.items():
+                if ultimo.get(n) != c:
+                    color(luces[n]["ip"], c)
+                    ultimo[n] = c
+
+
+if __name__ == "__main__":
+    main()

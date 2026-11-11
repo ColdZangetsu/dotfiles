@@ -4,7 +4,6 @@ import QtQuick.Layouts
 import Caelestia.Config
 import qs.components
 import qs.services
-import Quickshell
 
 ColumnLayout {
     id: root
@@ -29,7 +28,7 @@ ColumnLayout {
         Layout.alignment: Qt.AlignHCenter
 
         text: Time.format("dddd • d MMM").toUpperCase()
-        color: Colours.of(QsWindow.window ?? this).palette.m3onSurface
+        color: "#ff7a8e"
         font: Tokens.font.title.builders.medium.weight(Font.DemiBold).build()
     }
 

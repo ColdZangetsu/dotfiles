@@ -1,0 +1,12 @@
+[Unit]
+Description=Hora de la última entrada de teclado/mouse (presencia de Nero en Zangetsu)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/ultima-entrada
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=graphical-session.target

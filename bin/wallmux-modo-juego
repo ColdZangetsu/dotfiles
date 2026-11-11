@@ -29,7 +29,7 @@ from pathlib import Path
 MARKER_NAME = b"wallmux-pausa"  # máx. 15 caracteres (nombre de proceso en Linux)
 INTERVAL = 2.0
 # Clases de ventana que NO pausan los fondos al estar en pantalla completa
-FULLSCREEN_EXCLUDED = {"brave-origin", "claude"}
+FULLSCREEN_EXCLUDED = {"brave-origin", "claude", "cider", "Cider"}  # Cider: modo música, en el XENEON
 PR_SET_NAME = 15
 WALLMUX_CONFIG = Path.home() / ".config/wallmux/config.toml"
 WE_STATE = Path.home() / ".local/state/wallmux-we/state.json"

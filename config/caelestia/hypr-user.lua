@@ -5,7 +5,7 @@ local LG = "desc:LG Electronics LG ULTRAGEAR"
 local XENEON = "desc:Cyrix Corporation XENEON EDGE"
 hl.monitor({ output = ASUS, mode = "2560x1440@279.96", position = "2560x0", scale = 1.0, vrr = 2 }) -- G-Sync solo en pantalla completa
 hl.monitor({ output = LG, mode = "2560x1440@59.95", position = "0x0", scale = 1.0, vrr = 0 })
-hl.monitor({ output = XENEON, mode = "2560x720@60.27", position = "960x1440", scale = 1.6, vrr = 0 })
+hl.monitor({ output = XENEON, mode = "2560x720@60.27", position = "5120x990", scale = 1.6, vrr = 0 }) -- 10-28: a la derecha del ASUS y abajo (debajo del gabinete)
 
 -- Workspaces
 -- "gaming" (el 零 de la barra): solo existe mientras hay Steam o un juego abierto
@@ -143,4 +143,9 @@ end)
 -- Reinicio remoto: si la PC entró sola (bandera), modo trabajo + bloqueo (ver ~/Nero/reinicio-remoto)
 hl.on("hyprland.start", function()
     hl.exec_cmd(os.getenv("HOME") .. "/.local/bin/arranque-remoto-sesion")
+end)
+
+-- Reloj del XENEON (hora + ZANGETSU + notificaciones), debajo de las ventanas: ~/.config/quickshell/reloj
+hl.on("hyprland.start", function()
+    hl.exec_cmd("qs -c reloj -n -d")
 end)

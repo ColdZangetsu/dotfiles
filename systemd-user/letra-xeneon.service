@@ -1,0 +1,9 @@
+[Unit]
+Description=Letra del Apple TV en el XENEON (abre/cierra sola)
+After=graphical-session.target
+[Service]
+ExecStart=%h/.local/bin/letra-xeneon
+Restart=always
+RestartSec=5
+[Install]
+WantedBy=default.target

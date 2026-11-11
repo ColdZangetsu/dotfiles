@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# Super+F2: prende/apaga el modo música en la PC.
+#   - luces Govee al ritmo de lo que suena (govee-musica); si Zangetsu las está moviendo con AirPlay, se las quita
+#   - touch del XENEON prendido (normalmente va apagado: en juegos/pantalla completa escondía el mouse)
+#   - apaga el LG y el ASUS (DPMS, sin que el mouse/teclado los prendan) y cierra sus fondos animados
+#   - abre Cider si no está abierto, lo muestra en el XENEON (workspace especial "music", regla de rules.lua), en pantalla completa y en inmersivo
+TOUCH=wch.cn-touchscreen
+XENEON=DP-3
+APAGAR=(DP-1 DP-2)   # LG y ASUS
+
+if systemctl --user is-active -q govee-musica; then
+    systemctl --user stop govee-musica
+    hyprctl eval "hl.device({name=\"$TOUCH\", enabled=false})" >/dev/null
+    hyprctl eval 'hl.config({misc={mouse_move_enables_dpms=true, key_press_enables_dpms=true}})' >/dev/null
+    for m in "${APAGAR[@]}"; do hyprctl dispatch "hl.dsp.dpms({action=\"enable\", monitor=\"$m\"})" >/dev/null; done
+    qs -c caelestia ipc call idleInhibitor disable >/dev/null 2>&1
+    ~/.local/bin/wallmuxctl restore >/dev/null 2>&1
+    notify-send -a "Modo música" -u low -i audio-x-generic -h string:x-canonical-private-synchronous:modo-musica "Modo música" "Apagado"
+    exit 0
+fi
+
+timeout 4 ssh -o ConnectTimeout=3 -o BatchMode=yes zangetsu "systemctl --user stop govee-musica" >/dev/null 2>&1
+systemctl --user start govee-musica
+hyprctl eval "hl.device({name=\"$TOUCH\", enabled=true, output=\"$XENEON\"})" >/dev/null
+notify-send -a "Modo música" -u low -i audio-x-generic -h string:x-canonical-private-synchronous:modo-musica "Modo música" "Luces al ritmo, touch del XENEON prendido"
+
+# LG y ASUS apagados (los fondos se cierran para liberar GPU); que el mouse/teclado no los prendan
+# y que no se bloquee por inactividad mientras se usa el XENEON
+hyprctl eval 'hl.config({misc={mouse_move_enables_dpms=false, key_press_enables_dpms=false}})' >/dev/null
+for m in "${APAGAR[@]}"; do
+    ~/.local/bin/wallmuxctl stop-video --monitor "$m" >/dev/null 2>&1
+    hyprctl dispatch "hl.dsp.dpms({action=\"disable\", monitor=\"$m\"})" >/dev/null
+done
+qs -c caelestia ipc call idleInhibitor enable >/dev/null 2>&1
+
+hay_cider() { hyprctl clients -j | jq -e 'any(.[]; .class | ascii_downcase == "cider")' >/dev/null; }
+recien=0
+if ! hay_cider; then
+    recien=1
+    setsid -f flatpak run --branch=stable --arch=x86_64 --command=cider-wrapper sh.cider.Cider >/dev/null 2>&1
+    for i in $(seq 1 60); do hay_cider && break; sleep 0.5; done
+fi
+# por si se abrió (o ya estaba) fuera del workspace de música
+if ! hyprctl clients -j | jq -e 'any(.[]; (.class | ascii_downcase == "cider") and .workspace.name == "special:music")' >/dev/null; then
+    hyprctl eval 'hl.dispatch(hl.dsp.focus({ window = "class:^[Cc]ider$" })); hl.dispatch(hl.dsp.window.move({ workspace = "special:music" }))' >/dev/null
+fi
+if [[ $(hyprctl monitors -j | jq -r ".[] | select(.name == \"$XENEON\") | .specialWorkspace.name") != "special:music" ]]; then
+    hyprctl eval "hl.dispatch(hl.dsp.focus({ monitor = \"$XENEON\" }))" >/dev/null
+    hyprctl eval 'hl.dispatch(hl.dsp.workspace.toggle_special("music"))' >/dev/null
+fi
+# pantalla completa (solo si no lo está: el dispatcher alterna); el workspace de música ya está en el XENEON
+if [[ $(hyprctl clients -j | jq -r 'first(.[] | select(.class | ascii_downcase == "cider") | .fullscreen)') == 0 ]]; then
+    hyprctl eval "hl.dispatch(hl.dsp.focus({ monitor = \"$XENEON\" })); hl.dispatch(hl.dsp.focus({ window = \"class:^[Cc]ider\$\" })); hl.dispatch(hl.dsp.window.fullscreen({ mode = \"fullscreen\" }))" >/dev/null
+fi
+# inmersivo: Escape lo saca si ya estaba, Ctrl+P (atajo de Cider) lo prende → siempre queda en inmersivo
+[[ $recien == 1 ]] && sleep 8   # la interfaz de Cider tarda en cargar después de que aparece la ventana
+hyprctl eval 'hl.dispatch(hl.dsp.send_shortcut({ mods = "", key = "Escape", window = "class:^[Cc]ider$" }))' >/dev/null
+sleep 0.5
+hyprctl eval 'hl.dispatch(hl.dsp.send_shortcut({ mods = "CTRL", key = "P", window = "class:^[Cc]ider$" }))' >/dev/null
+# el foco (y el mouse) al XENEON, que es lo único prendido
+hyprctl eval "hl.dispatch(hl.dsp.focus({ monitor = \"$XENEON\" }))" >/dev/null

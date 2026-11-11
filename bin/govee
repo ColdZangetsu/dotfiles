@@ -5,7 +5,8 @@
 #   govee color ff00aa [luz]   color en hex (o: govee color 255 0 170)
 #   govee brillo 50 [luz]      brillo 1-100
 #   govee blanco 4000 [luz]    blanco con temperatura en kelvin (2000-9000)
-#   govee fondo [luz]          color según el fondo (paleta de Caelestia del monitor principal)
+#   govee fondo [luz]          color fijo de ~/.config/govee/fijos.json; si no hay, según el fondo
+#   govee fijar                guarda los colores que tienen ahorita las luces como fijos
 #   govee buscar               vuelve a buscar luces en la red
 #   govee esperar [segundos]   espera a que las luces respondan (al iniciar sesión)
 # [luz] es el nombre de ~/.config/govee/luces.json, o "todas" (por omisión).
@@ -18,17 +19,23 @@ from pathlib import Path
 
 CONFIG = Path.home() / ".config/govee/luces.json"
 SCHEME = Path.home() / ".local/state/caelestia/scheme.json"
+# Colores fijos por luz (pedido 10-27: "los colores de ahorita siempre"); borrar el archivo = volver al fondo
+FIJOS = Path.home() / ".config/govee/fijos.json"
 
 
 def wallpaper_colour():
-    """Tono del color clave del fondo, más saturado y brillante para que luzca en un LED."""
+    """Tono del color clave del fondo, saturado y a brillo máximo para que luzca en un LED."""
     c = json.loads(SCHEME.read_text())["colours"]
     hexc = c.get("primary_paletteKeyColor") or c["primary"]
     r, g, b = (int(hexc[i:i + 2], 16) / 255 for i in (0, 2, 4))
     h, s, _ = colorsys.rgb_to_hsv(r, g, b)
-    s = 0 if s < 0.08 else max(0.75, min(1.0, s * 2))  # fondos grises -> luz blanca
-    r, g, b = colorsys.hsv_to_rgb(h, s, 1.0)
-    return round(r * 255), round(g * 255), round(b * 255)
+    s = 0 if s < 0.08 else 1.0  # fondos grises -> luz blanca
+    # fondos azules (tono 180°–270°) -> azul puro, como el rojo ff0000 de antes (pedido 10-26)
+    if s and 0.5 <= h <= 0.75:
+        return 0, 0, 255
+    # tono más profundo, no menos brillo: el canal dominante queda al 100 % y los
+    # secundarios se elevan al cuadrado (igual que govee.ps1 en Windows)
+    return tuple(round(x * x * 255) for x in colorsys.hsv_to_rgb(h, s, 1.0))
 
 
 def socket_rx(timeout=2):
@@ -83,14 +90,17 @@ def refresh():
             while f"luz{n}" in lights:
                 n += 1
             name = f"luz{n}"
-        lights[name] = {"device": dev, "ip": d["ip"], "sku": d["sku"]}
+        lights[name] = {**lights.get(name, {}), "device": dev, "ip": d["ip"], "sku": d["sku"]}
     save(lights)
     return lights
 
 
 def targets(lights, name):
+    # "aparte": luces que NO entran en "todas" ni en los modos (11-03: luz3 = clóset)
     if name in (None, "todas"):
-        return list(lights.items())
+        return [(n, l) for n, l in lights.items() if not l.get("aparte")]
+    alias = {a: n for n, l in lights.items() for a in l.get("alias", [])}
+    name = alias.get(name.lower(), name)
     if name not in lights:
         sys.exit(f"No conozco la luz «{name}». Tengo: {', '.join(lights)}")
     return [(name, lights[name])]
@@ -123,6 +133,12 @@ def main():
     if not lights:
         sys.exit("No encontré luces. ¿Están en la misma red y con «LAN Control» activado?")
     cmd = args.pop(0) if args else "estado"
+    CANDADO = __import__("pathlib").Path.home() / ".config/nero/luces-bloqueadas"  # 11-04: candado (luces-bloqueo on/off)
+    if "--forzar" in args: args.remove("--forzar")
+    elif CANDADO.exists() and cmd in ("on", "prender", "brillo", "color", "fondo", "blanco"):
+        objetivo = [a for a in args if a in lights or a == "todas"]
+        if not (objetivo and all(lights.get(a, {}).get("aparte") for a in objetivo)):
+            sys.exit("Luces con candado (luces-bloqueo off para quitarlo, o --forzar)")
 
     if cmd == "esperar":
         end = time.time() + (int(args[0]) if args else 60)
@@ -162,15 +178,36 @@ def main():
         for _, l in targets(lights, rest[0] if rest else None):
             send(l["ip"], "colorwc", {"color": {"r": r, "g": g, "b": b}, "colorTemInKelvin": 0})
     elif cmd == "fondo":
-        r, g, b = wallpaper_colour()
-        for _, l in targets(lights, args[0] if args else None):
+        fijos = json.loads(FIJOS.read_text()) if FIJOS.exists() else {}
+        for name, l in targets(lights, args[0] if args else None):
+            # fijo "2500K" = blanco con esa temperatura (11-03: la tira luz3 en blanco cálido)
+            if name in fijos and str(fijos[name]).upper().endswith("K"):
+                send(l["ip"], "colorwc", {"color": {"r": 0, "g": 0, "b": 0}, "colorTemInKelvin": int(str(fijos[name])[:-1])})
+                continue
+            if name in fijos:
+                (r, g, b), _ = parse_color([fijos[name]])
+            else:
+                r, g, b = wallpaper_colour()
             send(l["ip"], "colorwc", {"color": {"r": r, "g": g, "b": b}, "colorTemInKelvin": 0})
+    elif cmd == "fijar":
+        fijos = json.loads(FIJOS.read_text()) if FIJOS.exists() else {}
+        for name, l in lights.items():
+            if l.get("aparte"):
+                continue
+            s = status(l["ip"])
+            if not s:
+                sys.exit(f"{name} no responde; no guardé nada")
+            c = s["color"]
+            fijos[name] = (f"{s['colorTemInKelvin']}K" if s.get("colorTemInKelvin")
+                           else f"{c['r']:02x}{c['g']:02x}{c['b']:02x}")
+        FIJOS.write_text(json.dumps(fijos, indent=2) + "\n")
+        print("Fijos:", ", ".join(f"{n} #{c}" for n, c in fijos.items()))
     elif cmd == "blanco":
         k = max(2000, min(9000, int(args[0]) if args else 4000))
         for _, l in targets(lights, args[1] if len(args) > 1 else None):
             send(l["ip"], "colorwc", {"color": {"r": 0, "g": 0, "b": 0}, "colorTemInKelvin": k})
     else:
-        sys.exit("Comandos: estado, on, off, color, brillo, blanco, fondo, buscar, esperar")
+        sys.exit("Comandos: estado, on, off, color, brillo, blanco, fondo, fijar, buscar, esperar")
 
 
 if __name__ == "__main__":

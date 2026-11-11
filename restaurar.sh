@@ -15,5 +15,6 @@ copiar() { # origen destino
 echo "~/.config";              copiar config "$HOME/.config"
 echo "~/.local/bin";           copiar bin "$HOME/.local/bin"
 echo "~/.config/systemd/user"; copiar systemd-user "$HOME/.config/systemd/user"
+echo "~/.local/share";         copiar local-share "$HOME/.local/share"
 echo
 echo "Listo. Falta: cambiar ZANGETSU_IP en bin/ si se usa, copiar a mano sistema/etc/, y habilitar los servicios (ver README)."

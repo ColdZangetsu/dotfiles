@@ -45,15 +45,14 @@ Card {
 
         RowLayout {
             Layout.fillWidth: true
+            spacing: 6 * Theme.scale
 
             Txt {
-                Layout.fillWidth: true
-                size: 15
-                font.weight: Font.Medium
-                text: {
-                    const s = root.locale.standaloneMonthName(root.shown.getMonth());
-                    return s.charAt(0).toUpperCase() + s.slice(1) + " " + root.shown.getFullYear();
-                }
+                size: 19
+                font.family: Theme.titleFont
+                font.capitalization: Font.AllUppercase
+                font.letterSpacing: 1 * Theme.scale
+                text: root.locale.standaloneMonthName(root.shown.getMonth())
 
                 MouseArea {
                     anchors.fill: parent
@@ -62,30 +61,57 @@ Card {
                 }
             }
 
+            Txt {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignBaseline
+                size: 12
+                color: Theme.cardTextDim
+                text: root.shown.getFullYear()
+            }
+
+            // Kanji del día de la semana (日月火水木金土), solo en el mes actual
+            Txt {
+                Layout.rightMargin: 4 * Theme.scale
+                size: 14
+                font.family: Theme.kanjiFont
+                color: Theme.accent
+                text: "日月火水木金土"[root.today.getDay()]
+                visible: root.offset === 0
+            }
+
             Repeater {
                 model: ["chevron_left", "chevron_right"]
 
-                Rectangle {
+                Item {
+                    id: arrow
+
                     required property string modelData
                     required property int index
 
                     implicitWidth: 24 * Theme.scale
                     implicitHeight: implicitWidth
-                    radius: width / 2
-                    color: "transparent"
-                    border.width: 1
-                    border.color: Theme.cardTextDim
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: width / 2
+                        color: Theme.inner
+                        visible: hover.containsMouse
+                    }
 
                     Icon {
                         anchors.centerIn: parent
-                        size: 16
-                        text: parent.modelData
+                        size: 18
+                        color: Theme.cardTextDim
+                        text: arrow.modelData
                     }
 
                     MouseArea {
+                        id: hover
+
                         anchors.fill: parent
+                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.offset += parent.index === 0 ? -1 : 1
+                        onClicked: root.offset += arrow.index === 0 ? -1 : 1
                     }
                 }
             }
@@ -100,13 +126,13 @@ Card {
             Repeater {
                 model: ["Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do"]
 
-                Txt {
+                Label {
                     required property string modelData
 
                     Layout.fillWidth: true
+                    Layout.bottomMargin: 2 * Theme.scale
                     horizontalAlignment: Text.AlignHCenter
-                    size: 11
-                    color: Theme.cardTextDim
+                    font.letterSpacing: 0.6 * Theme.scale
                     text: modelData
                 }
             }
@@ -125,7 +151,7 @@ Card {
                         width: 26 * Theme.scale
                         height: width
                         radius: width / 2
-                        color: Theme.chip
+                        color: Theme.today
                         visible: parent.modelData.today
                     }
 
@@ -133,9 +159,9 @@ Card {
                         anchors.centerIn: parent
                         size: 12
                         text: parent.modelData.day
-                        font.weight: parent.modelData.today ? Font.Bold : Font.Normal
-                        color: parent.modelData.today ? Theme.chipText : Theme.cardText
-                        opacity: parent.modelData.current ? 1 : 0.35
+                        font.weight: parent.modelData.today ? Font.DemiBold : Font.Normal
+                        color: parent.modelData.today ? Theme.todayText : Theme.cardText
+                        opacity: parent.modelData.current ? 1 : 0.3
                     }
                 }
             }

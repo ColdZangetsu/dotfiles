@@ -226,3 +226,9 @@ create_bind(
 
 -- Modo casa: al llegar del trabajo prende monitores, fondos y luces (ver ~/.local/bin/modo-trabajo)
 create_bind("SUPER + Home", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/modo-casa"), locked)  -- funciona con la pantalla bloqueada: solo prende todo y deja ver el bloqueo
+
+-- Audio: alterna audífonos BTD 600 <-> bocinas Pebble V3 (Pebble arranca bajito)
+create_bind("SUPER + F1", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/audio-cambiar"))
+-- Modo música: luces Govee al ritmo de lo que suena en la PC
+create_bind("SUPER + F2", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/modo-musica"))
+create_bind("SUPER + F3", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/govee-juego-tecla"))

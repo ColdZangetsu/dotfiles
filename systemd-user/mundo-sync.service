@@ -1,0 +1,12 @@
+[Unit]
+Description=Mundo personal de Minecraft: copia a Zangetsu (respaldo + mapa 3D) al cerrar el juego
+After=network-online.target
+
+[Service]
+ExecStart=%h/.local/bin/mundo-sync
+Restart=always
+RestartSec=30
+Nice=10
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,22 @@
+#!/bin/bash
+# Recompilar lo del AUR que depende de Qt tras la actualización a Qt 6.12 (10-28), uno por uno
+# Siempre con aur/: noctalia-qs (repo cachyos) "provee" quickshell-git y paru lo escogía en su lugar.
+LOG=~/.local/state/actualizacion.log
+exec > >(tee -a "$LOG") 2>&1
+echo "=== $(date '+%F %T') recompilación AUR"
+echo "== Contraseña (una sola vez)"
+sudo -v || { echo FIN-ERROR; read -r; exit 1; }
+( while true; do sudo -n true; sleep 45; done ) & VIVA=$!
+trap 'kill $VIVA 2>/dev/null' EXIT
+P="--noconfirm --skipreview --sudoloop"
+for pkg in aur/quickshell-git aur/qt6-m3shapes-git aur/qtengine; do
+    echo "== $pkg"
+    paru -S --rebuild=yes $P "$pkg" || { echo "FIN-ERROR $pkg"; read -r; exit 1; }
+done
+echo "== caelestia-shell (sin resolver dependencias: ya están todas instaladas)"
+paru -S --rebuild=yes --nodeps $P aur/caelestia-shell || { echo "FIN-ERROR caelestia-shell"; read -r; exit 1; }
+echo "== darkly-bin (actualización)"
+paru -S $P aur/darkly-bin || echo "aviso: falló darkly-bin"
+echo "== linux-wallpaperengine-git (fondos WE)"
+paru -S --rebuild=yes $P aur/linux-wallpaperengine-git || echo "aviso: falló linux-wallpaperengine-git"
+echo "=== $(date '+%F %T') FIN-OK"

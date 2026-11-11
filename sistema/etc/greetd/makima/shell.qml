@@ -131,7 +131,7 @@ ShellRoot {
             asynchronous: true
         }
 
-        // Fondo animado (Makima: Halo Descent grabado en loop); la imagen de arriba queda de respaldo
+        // Fondo animado (Zangetsu: mundo interior de Ichigo en loop); la imagen de arriba queda de respaldo
         Video {
             anchors.fill: parent
             source: "file://" + root.dir + "/fondo.mp4"

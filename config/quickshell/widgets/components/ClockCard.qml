@@ -8,7 +8,7 @@ import qs.services
 Card {
     id: root
 
-    property string place: "Mi ciudad"
+    property string place: "Casa"
     // [nombre, zona horaria]
     property var cities: [["Monterrey", "America/Monterrey"], ["Nueva York", "America/New_York"], ["Tokyo", "Asia/Tokyo"], ["Colombia", "America/Bogota"]]
     property var cityTimes: []
@@ -18,16 +18,18 @@ Card {
     implicitWidth: 300 * Theme.scale
     implicitHeight: col.implicitHeight + 32 * Theme.scale
 
+    // Por minuto (antes por segundo): la tarjeta no muestra segundos.
     SystemClock {
         id: clock
 
-        precision: SystemClock.Seconds
-        onDateChanged: if (date.getSeconds() === 0 || root.cityTimes.length === 0) cityProc.running = true
+        precision: SystemClock.Minutes
+        onDateChanged: cityProc.running = true
     }
 
     Process {
         id: cityProc
 
+        running: true
         command: ["sh", "-c", root.cities.map(c => `LC_ALL=C TZ='${c[1]}' date '+%-I:%M|%P|%H|%:::z'`).join(";")]
         stdout: StdioCollector {
             onStreamFinished: root.cityTimes = text.trim().split("\n").map(l => l.split("|"))
@@ -39,36 +41,35 @@ Card {
 
         anchors.fill: parent
         anchors.margins: 16 * Theme.scale
-        spacing: 4 * Theme.scale
+        spacing: 2 * Theme.scale
 
         RowLayout {
-            spacing: 4 * Theme.scale
+            spacing: 6 * Theme.scale
 
-            Icon {
-                size: 16
-                text: "location_on"
-                fill: false
+            Rectangle {
+                implicitWidth: 5 * Theme.scale
+                implicitHeight: implicitWidth
+                radius: width / 2
+                color: Theme.accent
             }
 
-            Txt {
-                size: 13
+            Label {
                 text: root.place
             }
         }
 
         RowLayout {
-            Layout.alignment: Qt.AlignRight
             spacing: 6 * Theme.scale
 
             Txt {
-                size: 40
-                font.weight: Font.Bold
+                size: 58
+                font.family: Theme.titleFont
                 text: clock.date.toLocaleTimeString(root.locale, "h:mm")
             }
 
             Txt {
                 Layout.alignment: Qt.AlignBottom
-                Layout.bottomMargin: 8 * Theme.scale
+                Layout.bottomMargin: 11 * Theme.scale
                 size: 14
                 color: Theme.cardTextDim
                 text: clock.date.getHours() < 12 ? "a.m." : "p.m."
@@ -76,7 +77,6 @@ Card {
         }
 
         Txt {
-            Layout.alignment: Qt.AlignRight
             size: 12
             color: Theme.cardTextDim
             text: {
@@ -85,17 +85,24 @@ Card {
             }
         }
 
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.topMargin: 12 * Theme.scale
+            implicitHeight: 1
+            color: Theme.line
+        }
+
         GridLayout {
             Layout.fillWidth: true
-            Layout.topMargin: 8 * Theme.scale
+            Layout.topMargin: 10 * Theme.scale
             columns: 2
-            rowSpacing: 8 * Theme.scale
-            columnSpacing: 8 * Theme.scale
+            rowSpacing: 10 * Theme.scale
+            columnSpacing: 18 * Theme.scale
 
             Repeater {
                 model: root.cities
 
-                Rectangle {
+                ColumnLayout {
                     id: city
 
                     required property var modelData
@@ -104,47 +111,50 @@ Card {
                     readonly property int hour: parseInt(t[2])
 
                     Layout.fillWidth: true
-                    implicitHeight: 52 * Theme.scale
-                    radius: 14 * Theme.scale
-                    color: Theme.inner
+                    Layout.preferredWidth: 1
+                    spacing: 1 * Theme.scale
 
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 8 * Theme.scale
-                        spacing: 0
+                    RowLayout {
+                        Layout.fillWidth: true
 
-                        RowLayout {
+                        Label {
                             Layout.fillWidth: true
-
-                            Txt {
-                                Layout.fillWidth: true
-                                size: 10
-                                elide: Text.ElideRight
-                                text: city.modelData[0]
-                            }
-
-                            Txt {
-                                size: 9
-                                color: Theme.cardTextDim
-                                text: "UTC" + city.t[3]
-                            }
+                            size: 9
+                            font.letterSpacing: 1 * Theme.scale
+                            elide: Text.ElideRight
+                            text: city.modelData[0]
                         }
 
-                        RowLayout {
+                        Txt {
+                            size: 9
+                            color: Theme.cardTextDim
+                            opacity: 0.7
+                            text: "UTC" + city.t[3]
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 4 * Theme.scale
+
+                        Txt {
+                            size: 16
+                            font.weight: Font.DemiBold
+                            text: city.t[0]
+                        }
+
+                        Txt {
                             Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignBaseline
+                            size: 10
+                            color: Theme.cardTextDim
+                            text: city.t[1] === "am" ? "a.m." : city.t[1] === "pm" ? "p.m." : ""
+                        }
 
-                            Txt {
-                                Layout.fillWidth: true
-                                size: 15
-                                font.weight: Font.Bold
-                                text: city.t[0] + " " + (city.t[1] === "am" ? "a.m." : city.t[1] === "pm" ? "p.m." : "")
-                            }
-
-                            Icon {
-                                size: 13
-                                color: Theme.cardTextDim
-                                text: city.hour >= 7 && city.hour < 19 ? "light_mode" : "dark_mode"
-                            }
+                        Icon {
+                            size: 13
+                            color: Theme.cardTextDim
+                            text: city.hour >= 7 && city.hour < 19 ? "light_mode" : "dark_mode"
                         }
                     }
                 }

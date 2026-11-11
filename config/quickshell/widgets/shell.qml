@@ -4,7 +4,8 @@ import Quickshell
 import qs.components
 import qs.services
 
-// Widgets de escritorio sobre Caelestia. Se inicia con: qs -c widgets
+// Widgets de escritorio sobre Caelestia — BORRADOR Eclipse (2026-11-11). Mismos widgets, datos y posiciones.
+// Tema: archivo "tema" de esta carpeta (eclipse | caelestia), cambia en vivo.
 ShellRoot {
     id: root
 
@@ -60,6 +61,7 @@ ShellRoot {
 
         StatTile {
             icon: "memory"
+            percent: SysStats.cpu
             value: SysStats.cpu + "%"
             label: "CPU"
         }
@@ -73,6 +75,7 @@ ShellRoot {
 
         StatTile {
             icon: "memory_alt"
+            percent: SysStats.ram
             value: SysStats.ram + "%"
             label: "RAM"
         }
@@ -86,6 +89,7 @@ ShellRoot {
 
         StatTile {
             icon: "developer_board"
+            percent: SysStats.gpu
             value: SysStats.gpu + "%"
             label: "GPU"
         }
@@ -99,6 +103,7 @@ ShellRoot {
 
         StatTile {
             icon: "hard_drive"
+            percent: SysStats.disk
             value: SysStats.disk + "%"
             label: "Disco"
             note: SysStats.diskSize > 0 ? root.gb(SysStats.diskUsed) + " de " + root.gb(SysStats.diskSize) + " GB" : ""

@@ -13,6 +13,7 @@ GPU: RTX 5070 (NVIDIA). Dual boot con Windows 11 vía Limine + Secure Boot.
 | `config/` | `~/.config/` | Hyprland, Caelestia (copia del shell **parchada**), foot, kitty, fish, fastfetch, fuzzel, btop, cava, wallmux, gtk/qt, easyeffects, nvim, micro |
 | `bin/` | `~/.local/bin/` | Mis scripts: modo trabajo/casa, monitores, wallmux, govee, xodus, etc. |
 | `systemd-user/` | `~/.config/systemd/user/` | Servicios y timers de usuario |
+| `local-share/` | `~/.local/share/` | `caelestia-permon/build.py`: arma la copia parchada de Caelestia (colores por monitor, bloqueo Eclipse, kanji…) |
 | `sistema/etc/` | `/etc/` | greetd (greeter de Makima), Limine, reglas udev del teclado, sshd |
 | `paquetes-repo.txt` | | `pacman -Qqen` (repos oficiales + CachyOS) |
 | `paquetes-aur.txt` | | `pacman -Qqem` (AUR) |

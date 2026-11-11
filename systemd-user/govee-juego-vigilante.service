@@ -1,0 +1,11 @@
+[Unit]
+Description=Luces Govee de juego: las prende al abrir un juego
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/govee-juego-vigilante
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+# Letra del Apple TV en el XENEON (2026-11-04). Vigila http://zangetsu:47180/estado:
+# suena música en el Apple TV -> abre la página de letra (Brave --app) a pantalla completa en DP-3;
+# 20 s sin música -> la cierra. Apagar: touch ~/.config/nero/letra-off
+import json, re, subprocess, time, urllib.request
+from pathlib import Path
+URL = "http://ZANGETSU_IP:47180/"
+HOST = "ZANGETSU_IP"
+OFF = Path.home() / ".config/nero/letra-off"
+
+def hl(lua): subprocess.run(["hyprctl", "eval", lua], capture_output=True)
+
+def clase():
+    try:
+        for c in json.loads(subprocess.run(["hyprctl", "clients", "-j"], capture_output=True, text=True).stdout):
+            if HOST in c["class"]: return c["class"]
+    except Exception: pass
+    return None
+
+def sel(c): return "class:^" + re.escape(c) + "$"
+
+def abrir():
+    subprocess.Popen(["/opt/brave-origin-bin/brave-origin", f"--app={URL}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    c = None
+    for _ in range(24):
+        time.sleep(0.5); c = clase()
+        if c: break
+    if not c: return
+    w = sel(c).replace("\\", "\\\\")
+    hl(f'hl.dispatch(hl.dsp.focus({{ window = "{w}" }})); hl.dispatch(hl.dsp.window.move({{ workspace = "special:letra" }}))'); time.sleep(0.8)
+    hl('hl.dispatch(hl.dsp.focus({ monitor = "DP-3" }))'); time.sleep(0.5)
+    hl(f'hl.dispatch(hl.dsp.focus({{ monitor = "DP-3" }})); hl.dispatch(hl.dsp.focus({{ window = "{w}" }})); hl.dispatch(hl.dsp.window.fullscreen({{ mode = "fullscreen" }}))')
+
+def asegurar():
+    """La ventana de letra debe estar en DP-3 y en pantalla completa (se corrige sola si algo la cambia)."""
+    try:
+        cs = json.loads(subprocess.run(["hyprctl", "clients", "-j"], capture_output=True, text=True).stdout)
+        ms = json.loads(subprocess.run(["hyprctl", "monitors", "-j"], capture_output=True, text=True).stdout)
+        c = next((c for c in cs if HOST in c["class"]), None)
+        m = next((m for m in ms if m["name"] == "DP-3"), None)
+        if not c or not m: return
+        w = sel(c["class"]).replace("\\", "\\\\")
+        if c["monitor"] != m["id"]:
+            ws = m["activeWorkspace"]["id"]
+            hl(f'hl.dispatch(hl.dsp.focus({{ window = "{w}" }})); hl.dispatch(hl.dsp.window.move({{ workspace = {ws} }}))'); time.sleep(0.6)
+        if c["fullscreen"] == 0 or c["monitor"] != m["id"]:
+            hl(f'hl.dispatch(hl.dsp.focus({{ monitor = "DP-3" }})); hl.dispatch(hl.dsp.focus({{ window = "{w}" }}))'); time.sleep(0.3)
+            if c["fullscreen"] == 0 or c["monitor"] != m["id"]:
+                hl('hl.dispatch(hl.dsp.window.fullscreen({ mode = "fullscreen" }))')
+    except Exception: pass
+
+def cerrar():
+    c = clase()
+    if c: hl('hl.dispatch(hl.dsp.window.close({ window = "' + sel(c).replace("\\", "\\\\") + '" }))')
+
+APAGAR = ["DP-1", "DP-2"]   # LG y ASUS (el XENEON es DP-3)
+def sh(*a): subprocess.run(list(a), capture_output=True)
+def monitores(apagar):
+    if apagar:
+        hl('hl.config({misc={mouse_move_enables_dpms=false, key_press_enables_dpms=false}})')
+        for m in APAGAR:
+            sh(str(Path.home() / ".local/bin/wallmuxctl"), "stop-video", "--monitor", m)
+            sh("hyprctl", "dispatch", f'hl.dsp.dpms({{action="disable", monitor="{m}"}})')
+        sh("qs", "-c", "caelestia", "ipc", "call", "idleInhibitor", "enable")
+    else:
+        hl('hl.config({misc={mouse_move_enables_dpms=true, key_press_enables_dpms=true}})')
+        for m in APAGAR: sh("hyprctl", "dispatch", f'hl.dsp.dpms({{action="enable", monitor="{m}"}})')
+        sh("qs", "-c", "caelestia", "ipc", "call", "idleInhibitor", "disable")
+        sh(str(Path.home() / ".local/bin/wallmuxctl"), "restore")
+
+apagados = False   # ¿los apagué yo? (si el modo música de Cider ya los apagó, no me meto)
+sin = 0.0
+while True:
+    try:
+        est = json.load(urllib.request.urlopen(URL + "estado", timeout=4))
+        musica = bool(est.get("musica")) and not OFF.exists()
+        cine = bool(est.get("cine")) and not musica and not OFF.exists()   # película/video en el Apple TV: solo apaga LG y ASUS
+    except Exception:
+        musica = cine = None   # Zangetsu no responde: no tocar nada
+    if musica is None: pass
+    elif musica or cine:
+        sin = 0.0
+        if musica:
+            if not clase(): abrir()
+            else: asegurar()
+        elif clase(): cerrar()   # empezó una película: la letra ya no hace falta
+        if not apagados and subprocess.run(["systemctl", "--user", "is-active", "-q", "govee-musica"]).returncode != 0:
+            monitores(True); apagados = True
+    else:
+        sin = sin or time.time()
+        if time.time() - sin > 20:
+            if clase(): cerrar()
+            if apagados: monitores(False); apagados = False
+    time.sleep(3)

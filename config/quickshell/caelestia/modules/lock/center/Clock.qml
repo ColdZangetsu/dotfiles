@@ -24,7 +24,7 @@ Item {
 
         y: -root.calcTopOff(hourMetrics)
         text: Time.hourStr
-        color: Colours.of(QsWindow.window ?? this).palette.m3primary
+        color: "#fff1f3"
         font: Tokens.font.headline.builders.large.scale(7 * root.centerScale).width(30).build()
 
         TextMetrics {
@@ -42,7 +42,7 @@ Item {
         y: -root.calcTopOff(minuteMetrics)
 
         text: Time.minuteStr
-        color: Colours.of(QsWindow.window ?? this).palette.m3secondary
+        color: "#ff2448"
         font: Tokens.font.headline.builders.large.scale((Units.twelveHourClock ? 3.8 : 7) * root.centerScale).width(30).build()
 
         TextMetrics {

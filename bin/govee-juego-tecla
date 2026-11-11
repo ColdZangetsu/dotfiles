@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Super+F3: apaga / vuelve a permitir las luces de juego (el vigilante lo respeta en ≤3 s)
+M=~/.config/govee/juego-apagado
+if [ -e "$M" ]; then
+    rm -f "$M"
+    notify-send -a "Luces de juego" -u low -i input-gaming -h string:x-canonical-private-synchronous:govee-juego "Luces de juego" "Prendidas: siguen la pantalla y el audio del juego"
+else
+    touch "$M"
+    systemctl --user stop govee-juego 2>/dev/null
+    notify-send -a "Luces de juego" -u low -i input-gaming -h string:x-canonical-private-synchronous:govee-juego "Luces de juego" "Apagadas: luces con su color fijo"
+fi

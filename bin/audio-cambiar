@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Alterna la salida de audio entre los audífonos BTD 600 y las bocinas Pebble V3 por Bluetooth (Super+F1).
+# Las Pebble solo aceptan un dispositivo a la vez: si Zangetsu las tiene (AirPlay), le pide que las suelte.
+# Al pasar a las Pebble se pone a VOL_PEBBLE; el volumen real se ajusta con la rueda de la bocina.
+# Mueve también lo que ya esté sonando.
+
+VOL_PEBBLE=1.00
+MAC=00:02:3C:D7:1D:87
+PEBBLE=bluez_output.${MAC//:/_}.1
+
+sink_id() { pactl list short sinks | awk -v n="$1" '$2 ~ n {print $2; exit}'; }
+avisar() { notify-send -a "Audio" -u low -i "$1" -h string:x-canonical-private-synchronous:audio-cambiar "Audio" "$2"; }
+
+btd=$(sink_id "BTD_600")
+actual=$(pactl get-default-sink)
+
+if [[ $actual != "$PEBBLE" ]]; then
+    if ! pactl list short sinks | grep -q "$PEBBLE"; then
+        avisar audio-speakers "Conectando las Pebble…"
+        timeout 5 ssh -o ConnectTimeout=3 -o BatchMode=yes zangetsu "bluetoothctl disconnect $MAC" >/dev/null 2>&1 && sleep 2
+        for i in 1 2 3; do bluetoothctl connect $MAC >/dev/null 2>&1 && break; sleep 2; done
+        for i in $(seq 1 10); do pactl list short sinks | grep -q "$PEBBLE" && break; sleep 0.5; done
+    fi
+    if pactl list short sinks | grep -q "$PEBBLE"; then
+        destino=$PEBBLE; nombre="Bocinas Pebble"; icono=audio-speakers
+        pactl set-sink-volume "$PEBBLE" "$(awk -v v=$VOL_PEBBLE 'BEGIN{print int(v*100)}')%"
+    else
+        avisar audio-volume-muted "No pude conectar las Pebble (¿están prendidas?)"
+        exit 1
+    fi
+elif [[ -n $btd ]]; then
+    destino=$btd; nombre="Audífonos BTD 600"; icono=audio-headphones
+else
+    avisar audio-volume-muted "No encontré los BTD 600"
+    exit 1
+fi
+
+pactl set-default-sink "$destino"
+pactl list short sink-inputs | cut -f1 | while read -r s; do pactl move-sink-input "$s" "$destino"; done
+avisar "$icono" "$nombre"
