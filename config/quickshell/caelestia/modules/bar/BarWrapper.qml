@@ -32,6 +32,10 @@ Item {
         (content.item as Bar)?.checkPopout(y);
     }
 
+    function salir(): void {
+        (content.item as Bar)?.salir();
+    }
+
     function handleWheel(y: real, angleDelta: point): void {
         (content.item as Bar)?.handleWheel(y, angleDelta);
     }
@@ -70,6 +74,32 @@ Item {
             }
         }
     ]
+
+    // 11-12 Fable: UNA píldora de cristal que se desliza de ícono en ícono bajo el cursor
+    Rectangle {
+        id: pildora
+
+        readonly property real objetivo: (content.item as Bar)?.sobreY ?? -1
+
+        z: -1
+        width: 36
+        height: 36
+        radius: 12
+        x: content.x + (content.width - width) / 2
+        y: content.y + (objetivo >= 0 ? objetivo : (y - content.y + height / 2)) - height / 2
+        opacity: objetivo >= 0 ? 1 : 0
+        color: Qt.rgba(0.94, 0.90, 0.85, 0.07)
+        border.width: 1
+        border.color: Qt.rgba(0.94, 0.90, 0.85, 0.10)
+
+        Behavior on y {
+            enabled: pildora.opacity > 0.01
+            NumberAnimation { duration: 180; easing.type: Easing.OutBack; easing.overshoot: 0.8 }
+        }
+        Behavior on opacity {
+            NumberAnimation { duration: 120 }
+        }
+    }
 
     Loader {
         id: content

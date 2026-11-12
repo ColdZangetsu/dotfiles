@@ -1,3 +1,6 @@
+// BORRADOR fable (sin probar dentro de Caelestia): reemplaza a modules/bar/components/workspaces/Workspaces.qml
+// y necesita la carpeta fable/ junto a él. Ver LEEME.md de barras-osd/fable-workspaces.
+// Cada monitor lleva su variante: la tabla está justo abajo, en `variantePorMonitor`.
 pragma ComponentBehavior: Bound
 
 import QtQuick
@@ -9,9 +12,22 @@ import Caelestia.Components
 import Caelestia.Config
 import qs.components
 import qs.services
+import qs.utils
+import "fable"
 
 StyledClippingRect {
     id: root
+
+    // ╔═══════════════════ fable: QUÉ VARIANTE VA EN CADA MONITOR ═══════════════════╗
+    //   "A" = Eclipse deslizante · "B" = Fases de luna · "C" = Tajo
+    //   El nombre es el de Hyprland (`hyprctl monitors`), el mismo que da `screen.name`.
+    readonly property var variantePorMonitor: ({
+            "DP-1": "B", // LG
+            "DP-2": "B", // ASUS
+            "DP-3": "A"  // XENEON
+        })
+    readonly property string variantePorDefecto: "B" // cualquier monitor que no esté en la tabla
+    // ╚═══════════════════════════════════════════════════════════════════════════════╝
 
     required property ShellScreen screen
     required property bool fullscreen
@@ -44,9 +60,31 @@ StyledClippingRect {
         return workspaces.slice(start, end).map(w => w.id);
     }
 
-    readonly property var workspaces: {
-        workspaces.itemsDirty;
-        return wsIds.map(id => workspaces.itemAtIndex(workspaceIndex(id)));
+    // fable: lo que pinta el indicador, una entrada por escritorio mostrado
+    readonly property var modeloFable: {
+        const cfg = Config.bar.workspaces;
+        const ignoredTags = GlobalConfig.bar.workspaces.ignoredTags;
+        const kanji = ["〇", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
+        return wsIds.map(id => {
+            const ws = Hypr.workspaces.values.find(w => w.id === id);
+            const nombre = !ws || ws.name == id ? id : Hypr.trimWsName(ws.name);
+            let etiqueta;
+            if (ws?.name === "gaming")
+                etiqueta = "零"; // el escritorio "gaming" va como cero
+            else if (Number.isInteger(Number(nombre)) && nombre >= 0 && nombre <= 10)
+                etiqueta = kanji[nombre];
+            else
+                etiqueta = String(nombre)[0] ?? "";
+            const ventanas = Hypr.toplevelsForWs(id, ignoredTags);
+            return {
+                id: id,
+                etiqueta: etiqueta,
+                icono: ws ? Icons.matchIconRuleList(Hypr.trimWsName(ws.name), GlobalConfig.bar.workspaces.workspaceIcons) : "",
+                ocupado: ventanas.length > 0,
+                ventanas: cfg.showWindows && cfg.maxWindowIcons > 0 ? ventanas.slice(0, cfg.maxWindowIcons).map(t => Icons.getAppCategoryIcon(t.lastIpcObject.class, "terminal")) : [],
+                ajeno: !cfg.perMonitor && !!ws?.monitor && ws.monitor !== root.monitor
+            };
+        });
     }
 
     // Only relevant for when showUnoccupied is true
@@ -66,7 +104,7 @@ StyledClippingRect {
     }
 
     implicitWidth: Tokens.sizes.bar.innerWidth
-    implicitHeight: workspaces.layoutHeight + workspaces.anchors.margins * 2
+    implicitHeight: fable.implicitHeight
 
     color: Colours.of(QsWindow.window ?? this).tPalette.m3surfaceContainer
     radius: Tokens.rounding.full
@@ -84,95 +122,38 @@ StyledClippingRect {
             blurMax: 32
         }
 
-        Loader {
-            asynchronous: true
-            opacity: Config.bar.workspaces.occupiedBg ? 1 : 0
-            active: opacity > 0
+        // ── fable: el indicador completo (etiquetas, ventanas, activo) lo pinta un solo componente ──
+        // La variante la elige EscritoriosPorMonitor con la tabla de arriba; A, B y C comparten Base.qml.
+        EscritoriosPorMonitor {
+            id: fable
 
-            anchors.fill: parent
-            anchors.margins: Tokens.padding.extraSmall
+            pantalla: root.screen?.name ?? ""
+            mapa: root.variantePorMonitor
+            porDefecto: root.variantePorDefecto
 
-            sourceComponent: OccupiedBg {
-                workspaces: root.workspaces
-                wsSpacing: workspaces.spacing
-            }
+            anchors.horizontalCenter: parent.horizontalCenter
+            fondo: false // la píldora ya la pone esta barra
 
-            Behavior on opacity {
-                Anim {
-                    type: Anim.DefaultEffects
-                }
-            }
-        }
+            modelo: root.modeloFable
+            activo: root.activeWsIdx
 
-        LazyListView {
-            id: workspaces
+            ancho: Tokens.sizes.bar.innerWidth
+            celda: Tokens.sizes.bar.innerWidth - Tokens.padding.small
+            separacion: Tokens.spacing.extraSmall
+            margen: Tokens.padding.extraSmall
+            fuenteKanji: Tokens.font.workspaces
+            mostrarVentanas: Config.bar.workspaces.showWindows && Config.bar.workspaces.maxWindowIcons > 0
+            reducirMovimiento: false
 
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.margins: Tokens.padding.extraSmall
-            implicitHeight: contentHeight
+            // Opcional: seguir los colores del tema en vez de la paleta Eclipse fija
+            // paleta: Paleta {
+            //     rojo: Colours.of(QsWindow.window ?? this).palette.m3primary
+            //     hueso: Colours.of(QsWindow.window ?? this).palette.m3onSurface
+            //     tenue: Colours.of(QsWindow.window ?? this).palette.m3outline
+            // }
 
-            spacing: Tokens.spacing.extraSmall
-            removeDuration: Tokens.anim.durations.expressiveDefaultEffects
-
-            model: ScriptModel {
-                values: root.wsIds
-            }
-
-            delegate: Workspace {
-                activeWsId: root.activeWsId
-                ws: modelData
-                monitor: root.monitor
-
-                displayType: Config.bar.workspaces.displayType
-                showWindows: Config.bar.workspaces.showWindows
-                iconRules: GlobalConfig.bar.workspaces.workspaceIcons
-                activeLabel: Config.bar.workspaces.activeLabel
-                occupiedLabel: Config.bar.workspaces.occupiedLabel
-                label: Config.bar.workspaces.label
-            }
-        }
-
-        Loader {
-            asynchronous: true
-            opacity: Config.bar.workspaces.showUnoccupied ? 0 : 1
-            active: opacity > 0
-
-            anchors.fill: parent
-            anchors.margins: Tokens.padding.extraSmall
-
-            sourceComponent: GapMarkers {
-                workspaces: root.workspaces
-                wsSpacing: workspaces.spacing
-            }
-
-            Behavior on opacity {
-                Anim {
-                    type: Anim.DefaultEffects
-                }
-            }
-        }
-
-        Loader {
-            asynchronous: true
-            anchors.left: workspaces.left
-            anchors.right: workspaces.right
-            active: Config.bar.workspaces.activeIndicator
-
-            sourceComponent: ActiveIndicator {
-                activeWs: {
-                    workspaces.itemsDirty;
-                    return workspaces.itemAtIndex(root.activeWsIdx) as Workspace;
-                }
-                mask: workspaces
-            }
-        }
-
-        MouseArea {
-            anchors.fill: workspaces
-            onClicked: event => {
-                const ws = (workspaces.itemAt(event.x, event.y) as Workspace)?.ws;
+            onElegido: i => {
+                const ws = root.wsIds[i];
                 if (!ws)
                     return;
                 if (Hypr.activeWsId !== ws)

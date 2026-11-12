@@ -20,6 +20,16 @@ Item {
 
     StateLayer {
         radius: Tokens.rounding.large
+        // 11-12 Fable: el mouse mueve la selección (el filo rojo sigue al cursor) en vez de un resaltado aparte
+        showHoverBackground: false
+        onContainsMouseChanged: {
+            const v = root.ListView.view;
+            if (containsMouse && v) {
+                const i = v.indexAt(root.x + 1, root.y + root.height / 2);
+                if (i >= 0)
+                    v.currentIndex = i;
+            }
+        }
         onClicked: {
             Apps.launch(root.modelData);
             root.screenState.launcher = false;

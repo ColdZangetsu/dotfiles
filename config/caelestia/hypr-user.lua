@@ -70,7 +70,7 @@ local fn = require("utils.functions")
 -- 11-11: el workspace de Claude ahora es VS Code (Claude corre en su terminal)
 hl.window_rule({ match = { class = "^code-oss$" }, workspace = "special:claude" })
 -- 11-11: VS Code más transparente que el resto (0.95) para que se vea el fondo
-hl.window_rule({ match = { class = "^code-oss$", fullscreen = false }, opacity = "0.85 override 0.80 override" })
+hl.window_rule({ match = { class = "^code-oss$", fullscreen = false }, opacity = "0.80 override 0.74 override" })   -- 11-12 receta Fable (antes 0.85/0.80)
 
 -- Super + A: mostrar/ocultar el workspace de Claude (lo abre si no está corriendo)
 -- (antes Super+C; desde 2026-10-21 Super+C = hablarle a Nero por voz)
@@ -161,3 +161,6 @@ end)
 
 -- 11-12: Super + L = barra de luces del OSD (día ↔ noche de las Govee del cuarto); ver ~/.local/bin/luces-ambiente
 hl.bind("SUPER + L", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/luces-ambiente mostrar"))
+
+-- 11-12: Super + F4 = controles táctiles del XENEON (touch + las 3 barras por unos segundos); ver ~/.local/bin/xeneon-control
+hl.bind("SUPER + F4", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/xeneon-control"))

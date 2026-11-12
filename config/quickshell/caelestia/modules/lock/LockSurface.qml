@@ -163,7 +163,9 @@ WlSessionLockSurface {
         anchors.fill: parent
         opacity: 0
 
-        layer.enabled: true
+        // 11-12: con el video de fondo no hay desenfoque, así que no hace falta pintar todo en una capa extra
+        // por monitor (gastaba VRAM en cada bloqueo). Original: LockSurface.qml.antes-fable
+        layer.enabled: !root.videoFondo
         layer.effect: MultiEffect {
             autoPaddingEnabled: false
             blurEnabled: !root.videoFondo

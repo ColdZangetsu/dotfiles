@@ -24,15 +24,15 @@ return {
     blurSpecialWs              = false,
     blurPopups                 = true,
     blurInputMethods           = true,
-    blurSize                   = 8,
-    blurPasses                 = 2,
-    blurXray                   = false,
+    blurSize                   = 6,      -- 11-12 receta Fable (antes 8)
+    blurPasses                 = 3,      -- 11-12 receta Fable (antes 2)
+    blurXray                   = true,   -- 11-12 receta Fable (antes false)
 
     -- Shadow
     shadowEnabled              = true,
-    shadowRange                = 15,
-    shadowRenderPower          = 4,
-    shadowColour               = "rgba(" .. scheme.inversePrimary .. "10)",
+    shadowRange                = 20,     -- 11-12 receta Fable (antes 15)
+    shadowRenderPower          = 3,      -- 11-12 receta Fable (antes 4)
+    shadowColour               = "rgba(00000059)",   -- 11-12 receta Fable (antes inversePrimary al 6 %)
 
     -- Gaps
     workspaceGaps              = 20,

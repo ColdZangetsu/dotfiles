@@ -31,6 +31,8 @@ INTERVAL = 2.0
 # Clases de ventana que NO pausan los fondos al estar en pantalla completa
 FULLSCREEN_EXCLUDED = {"brave-origin", "claude", "cider", "Cider"}  # Cider: modo música, en el XENEON
 PR_SET_NAME = 15
+# Juegos nativos de Linux que también cierran los fondos (no solo pausar) para liberar VRAM
+NATIVE_GAME_CLASSES = {"io.github.notrexed.hookshot"}  # 11-11 Zelda OoT (Hookshot): 6 GB VRAM + fondos 3.3 GB = 12 GB llenos
 WALLMUX_CONFIG = Path.home() / ".config/wallmux/config.toml"
 WE_STATE = Path.home() / ".local/state/wallmux-we/state.json"
 WALLMUX_STATE = Path.home() / ".local/state/wallmux/state.json"
@@ -90,7 +92,9 @@ def game_fullscreen():
 
 def is_game_class(cls):
     cls = cls.lower()
-    return cls.startswith("steam_app") or cls.endswith(".exe") or cls == "gamescope"
+    # 11-12: Minecraft (Prism) también cierra los fondos; su clase suele ser "Minecraft 1.21.x" / "Minecraft* …"
+    return (cls.startswith("steam_app") or cls.endswith(".exe") or cls == "gamescope"
+            or cls.startswith("minecraft") or cls in NATIVE_GAME_CLASSES)
 
 
 def inhibiting_process_running():
@@ -133,6 +137,10 @@ def close_we():
             if "linux-wallpaper" in Path(f"/proc/{pid}/cmdline").read_text():
                 os.kill(pid, signal.SIGCONT)
                 os.kill(pid, signal.SIGTERM)
+                # 11-12: a veces ignora SIGTERM (visto con monitores apagados) y seguía ocupando VRAM
+                time.sleep(1)
+                if Path(f"/proc/{pid}").exists():
+                    os.kill(pid, signal.SIGKILL)
         except (OSError, TypeError):
             pass
 

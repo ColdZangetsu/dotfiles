@@ -59,7 +59,7 @@ Item {
         topPadding: Math.round((Tokens.padding.medium + Tokens.padding.large) / 2)
         bottomPadding: Math.round((Tokens.padding.medium + Tokens.padding.large) / 2)
 
-        placeholderText: Tr.tr("Type \"%1\" for commands").arg(GlobalConfig.launcher.actionPrefix)
+        placeholderText: "Buscar…   %1 para comandos".arg(GlobalConfig.launcher.actionPrefix)   // 11-12 Fable
 
         onAccepted: {
             const currentItem = list.currentList?.currentItem;

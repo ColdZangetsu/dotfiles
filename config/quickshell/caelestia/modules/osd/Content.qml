@@ -26,6 +26,7 @@ Item {
     property bool verVolumen
     property bool verBrillo
     property bool verLuces
+    signal actividad   // mover una barra (mouse o toque) mantiene el OSD abierto
 
     readonly property real escala: 0.6   // tamaño: 0.6 = ~43x192 px (parecido a las barras viejas)
     readonly property real margen: 12    // aire para el aura, la burbuja y el tajo que se salen de la barra
@@ -49,7 +50,7 @@ Item {
                 scale: root.escala
                 despierto: root.screenState.osd
                 value: LucesAmbiente.value
-                onMovida: v => LucesAmbiente.set(v)
+                onMovida: v => { LucesAmbiente.set(v); root.actividad(); }
             }
         }
 
@@ -62,7 +63,7 @@ Item {
                 scale: root.escala
                 despierto: root.screenState.osd
                 value: Math.min(1, root.volume / root.maxVol)
-                onMovida: v => Audio.setVolume(v * root.maxVol)
+                onMovida: v => { Audio.setVolume(v * root.maxVol); root.actividad(); }
             }
         }
 
@@ -102,7 +103,7 @@ Item {
                 scale: root.escala
                 despierto: root.screenState.osd
                 value: root.brightness
-                onMovida: v => root.monitor?.setBrightness(v)
+                onMovida: v => { root.monitor?.setBrightness(v); root.actividad(); }
             }
         }
     }

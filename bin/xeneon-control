@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Controles táctiles del XENEON (11-12): prende el touch y enseña las 3 barras del OSD (luces, volumen, brillo) en el XENEON
+# por ~25 s (cada toque a una barra lo alarga). Luego apaga el touch otra vez (en juegos/pantalla completa escondía el mouse),
+# salvo que el modo música (Super+F2) lo esté usando. Atajo: Super+F4. También: ssh pc xeneon-control (Nero por voz).
+TOUCH=wch.cn-touchscreen; XENEON=DP-3
+mkdir -p ~/.local/state/luces-ambiente
+hyprctl eval "hl.device({name=\"$TOUCH\", enabled=true, output=\"$XENEON\"})" >/dev/null
+echo "$XENEON $(date +%s.%N)" > ~/.local/state/luces-ambiente/control
+systemctl --user stop xeneon-control-fin.timer xeneon-control-fin.service >/dev/null 2>&1
+systemd-run --user --quiet --collect --unit=xeneon-control-fin --on-active=40s bash -c \
+  "systemctl --user is-active -q govee-musica || hyprctl eval 'hl.device({name=\"$TOUCH\", enabled=false})'" >/dev/null 2>&1

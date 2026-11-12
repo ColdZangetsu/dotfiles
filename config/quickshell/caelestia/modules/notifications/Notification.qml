@@ -22,8 +22,23 @@ StyledRect {
     readonly property int nonAnimHeight: summary.implicitHeight + (root.expanded ? Tokens.spacing.extraSmall * 2 + appName.height + body.height + actions.height + actions.anchors.topMargin : bodyPreview.height) + inner.anchors.margins * 2
     property bool expanded: Config.notifs.openExpanded
 
-    color: root.modelData.urgency === NotificationUrgency.Critical ? Colours.of(QsWindow.window ?? this).palette.m3secondaryContainer : Colours.of(QsWindow.window ?? this).tPalette.m3surfaceContainer
-    radius: Tokens.rounding.large
+    // 11-12 Fable "tinta y filo": tarjeta sobria; solo lo crítico lleva rojo (borde tenue + filo). Original: Notification.qml.antes-fable
+    readonly property bool critico: root.modelData.urgency === NotificationUrgency.Critical
+    color: Qt.alpha(critico ? "#1a1114" : "#14171d", Colours.of(QsWindow.window ?? this).tPalette.m3surfaceContainer.a)
+    radius: 16
+    border.width: 1
+    border.color: critico ? Qt.rgba(1, 0.14, 0.28, 0.45) : Qt.rgba(0.94, 0.90, 0.85, 0.06)
+
+    Rectangle {
+        visible: root.critico
+        z: 2
+        x: 0
+        anchors.verticalCenter: parent.verticalCenter
+        width: 3
+        height: Math.max(0, parent.height - 32)
+        radius: 1.5
+        color: "#ff2448"
+    }
 
     implicitHeight: inner.implicitHeight
 
@@ -116,8 +131,8 @@ StyledRect {
                 visible: root.hasImage || root.hasAppIcon
 
                 sourceComponent: StyledClippingRect {
-                    radius: Tokens.rounding.full
-                    color: root.modelData.urgency === NotificationUrgency.Critical ? Colours.of(QsWindow.window ?? this).palette.m3error : root.modelData.urgency === NotificationUrgency.Low ? Colours.layer(Colours.of(QsWindow.window ?? this).palette.m3surfaceContainerHighest, 2) : Colours.of(QsWindow.window ?? this).palette.m3secondaryContainer
+                    radius: 10
+                    color: root.critico ? "#3a1218" : "#1d2129"
                     implicitWidth: TokenConfig.sizes.notifs.image
                     implicitHeight: TokenConfig.sizes.notifs.image
 
@@ -147,8 +162,8 @@ StyledRect {
                 anchors.bottom: root.hasImage ? image.bottom : undefined
 
                 sourceComponent: StyledRect {
-                    radius: Tokens.rounding.full
-                    color: root.modelData.urgency === NotificationUrgency.Critical ? Colours.of(QsWindow.window ?? this).palette.m3error : root.modelData.urgency === NotificationUrgency.Low ? Colours.layer(Colours.of(QsWindow.window ?? this).palette.m3surfaceContainerHighest, 2) : Colours.of(QsWindow.window ?? this).palette.m3secondaryContainer
+                    radius: 10
+                    color: root.critico ? "#3a1218" : "#1d2129"
                     implicitWidth: root.hasImage ? Tokens.sizes.notifs.badge : TokenConfig.sizes.notifs.image
                     implicitHeight: root.hasImage ? Tokens.sizes.notifs.badge : TokenConfig.sizes.notifs.image
 
@@ -179,7 +194,7 @@ StyledRect {
 
                         sourceComponent: MaterialIcon {
                             text: Icons.getNotifIcon(root.modelData.summary, root.modelData.urgency)
-                            color: root.modelData.urgency === NotificationUrgency.Critical ? Colours.of(QsWindow.window ?? this).palette.m3onError : root.modelData.urgency === NotificationUrgency.Low ? Colours.of(QsWindow.window ?? this).palette.m3onSurface : Colours.of(QsWindow.window ?? this).palette.m3onSecondaryContainer
+                            color: root.critico ? "#ff2448" : "#efe6d8"
                             fontStyle: Tokens.font.icon.medium
                         }
                     }

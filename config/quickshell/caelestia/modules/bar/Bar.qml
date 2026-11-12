@@ -18,6 +18,12 @@ ColumnLayout {
     required property BarPopouts.Wrapper popouts
     required property bool fullscreen
     readonly property int vPadding: Tokens.padding.large
+    // 11-12 Fable: centro Y del ícono bajo el cursor, para la píldora de cristal (-1 = ninguno). Original: Bar.qml.antes-fable
+    property real sobreY: -1
+
+    function salir(): void {
+        sobreY = -1;
+    }
 
     function closeTray(): void {
         if (!Config.bar.tray.compact)
@@ -38,16 +44,24 @@ ColumnLayout {
 
         if (!ch) {
             popouts.hasCurrent = false;
+            sobreY = -1;
             return;
         }
 
         const id = ch.entryId;
         const top = ch.y;
 
+        // píldora: logo, reloj y apagado = centro del elemento; estado y bandeja = centro del ícono (abajo)
+        if (id === "logo" || id === "clock" || id === "power")
+            sobreY = ch.y + ch.height / 2;
+        else if (id !== "statusIcons" && id !== "tray")
+            sobreY = -1;
+
         if (id === "statusIcons" && Config.bar.popouts.statusIcons) {
             const items = (ch.item as StatusIcons).items;
             const icon = items.childAt(items.width / 2, mapToItem(items, 0, y).y);
             if (icon) {
+                root.sobreY = icon.mapToItem(root, 0, icon.height / 2).y;
                 popouts.currentName = icon.name;
                 popouts.currentCenter = Qt.binding(() => icon.mapToItem(root, 0, icon.implicitHeight / 2).y);
                 popouts.hasCurrent = true;
@@ -58,6 +72,7 @@ ColumnLayout {
                 const index = Math.floor(((y - top - tray.padding * 2 + tray.spacing) / tray.layout.implicitHeight) * tray.items.count);
                 const trayItem = tray.items.itemAt(index);
                 if (trayItem) {
+                    root.sobreY = trayItem.mapToItem(root, 0, trayItem.height / 2).y;
                     popouts.currentName = `traymenu${index}`;
                     popouts.currentCenter = Qt.binding(() => trayItem.mapToItem(root, 0, trayItem.implicitHeight / 2).y);
                     popouts.hasCurrent = true;

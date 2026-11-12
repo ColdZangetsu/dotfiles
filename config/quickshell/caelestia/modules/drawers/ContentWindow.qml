@@ -42,7 +42,8 @@ StyledWindow {
     readonly property real shadowOpacity: 0.7 * (1 - fsTransitionProg)
     readonly property real borderLayoutThickness: hasFullscreen ? 0 : contentItem.Config.border.thickness
 
-    property color surfaceColour: Colours.of(QsWindow.window ?? this).tPalette.m3surface
+    // 11-12 Fable paso 4: tinta fija (#0c0e12) en marco/barra/paneles, con la transparencia de Caelestia (antes tPalette.m3surface)
+    property color surfaceColour: Qt.alpha("#0c0e12", Colours.of(QsWindow.window ?? this).tPalette.m3surface.a)
 
     readonly property int dragMaskPadding: {
         if (focusGrab.active || panels.popouts.isDetached)

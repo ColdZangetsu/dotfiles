@@ -57,8 +57,22 @@ StyledRect {
     implicitHeight: nonAnimHeight
 
     clip: true
-    radius: Tokens.rounding.large
-    color: Colours.layer(Colours.of(QsWindow.window ?? this).palette.m3surfaceContainer, 2)
+    // 11-12 Fable "tinta y filo": tarjeta tinta con borde fino; lo crítico trae filo rojo (original: NotifGroup.qml.antes-fable)
+    radius: 16
+    color: root.urgency === NotificationUrgency.Critical ? "#1a1114" : "#14171d"
+    border.width: 1
+    border.color: root.urgency === NotificationUrgency.Critical ? Qt.rgba(1, 0.14, 0.28, 0.40) : Qt.rgba(0.94, 0.90, 0.85, 0.06)
+
+    Rectangle {
+        visible: root.urgency === NotificationUrgency.Critical
+        z: 3
+        x: 0
+        y: 18
+        width: 3
+        height: Math.max(0, root.height - 36)
+        radius: 1.5
+        color: "#ff2448"
+    }
 
     Behavior on implicitHeight {
         Anim {}
@@ -112,15 +126,15 @@ StyledRect {
 
                 MaterialIcon {
                     text: Icons.getNotifIcon(root.activeNotifs[0]?.summary, root.urgency)
-                    color: root.urgency === NotificationUrgency.Critical ? Colours.of(QsWindow.window ?? this).palette.m3onError : root.urgency === NotificationUrgency.Low ? Colours.of(QsWindow.window ?? this).palette.m3onSurface : Colours.of(QsWindow.window ?? this).palette.m3onSecondaryContainer
+                    color: root.urgency === NotificationUrgency.Critical ? "#ff2448" : "#efe6d8"
                     fontStyle: Tokens.font.icon.medium
                 }
             }
 
             StyledClippingRect {
                 anchors.fill: parent
-                color: root.urgency === NotificationUrgency.Critical ? Colours.of(QsWindow.window ?? this).palette.m3error : root.urgency === NotificationUrgency.Low ? Colours.layer(Colours.of(QsWindow.window ?? this).palette.m3surfaceContainerHigh, 3) : Colours.of(QsWindow.window ?? this).palette.m3secondaryContainer
-                radius: Tokens.rounding.full
+                color: root.urgency === NotificationUrgency.Critical ? "#3a1218" : "#1d2129"
+                radius: 10
 
                 Loader {
                     asynchronous: true
@@ -140,8 +154,8 @@ StyledRect {
                     implicitWidth: Tokens.sizes.notifs.badge
                     implicitHeight: Tokens.sizes.notifs.badge
 
-                    color: root.urgency === NotificationUrgency.Critical ? Colours.of(QsWindow.window ?? this).palette.m3error : root.urgency === NotificationUrgency.Low ? Colours.of(QsWindow.window ?? this).palette.m3surfaceContainerHigh : Colours.of(QsWindow.window ?? this).palette.m3secondaryContainer
-                    radius: Tokens.rounding.full
+                    color: root.urgency === NotificationUrgency.Critical ? "#3a1218" : "#1d2129"
+                    radius: 10
 
                     ColouredIcon {
                         anchors.centerIn: parent
@@ -190,8 +204,8 @@ StyledRect {
                     implicitWidth: expandBtn.implicitWidth + Tokens.padding.large
                     implicitHeight: groupCount.implicitHeight + Tokens.padding.extraSmall
 
-                    color: root.urgency === NotificationUrgency.Critical ? Colours.of(QsWindow.window ?? this).palette.m3error : Colours.layer(Colours.of(QsWindow.window ?? this).palette.m3surfaceContainerHigh, 3)
-                    radius: Tokens.rounding.full
+                    color: root.urgency === NotificationUrgency.Critical ? "#3a1218" : "#1d2129"
+                    radius: 8
 
                     StateLayer {
                         color: root.urgency === NotificationUrgency.Critical ? Colours.of(QsWindow.window ?? this).palette.m3onError : Colours.of(QsWindow.window ?? this).palette.m3onSurface
@@ -210,14 +224,14 @@ StyledRect {
                             Layout.leftMargin: Tokens.padding.extraSmall / 2
                             animate: true
                             text: root.notifCount
-                            color: root.urgency === NotificationUrgency.Critical ? Colours.of(QsWindow.window ?? this).palette.m3onError : Colours.of(QsWindow.window ?? this).palette.m3onSurfaceVariant
+                            color: root.urgency === NotificationUrgency.Critical ? "#ffb3bf" : "#c9ced8"   // 11-12 Fable: legible sobre el chip
                             font: Tokens.font.body.small
                         }
 
                         MaterialIcon {
                             Layout.rightMargin: -Tokens.padding.extraSmall / 2
                             text: "expand_more"
-                            color: root.urgency === NotificationUrgency.Critical ? Colours.of(QsWindow.window ?? this).palette.m3onError : Colours.of(QsWindow.window ?? this).palette.m3onSurfaceVariant
+                            color: root.urgency === NotificationUrgency.Critical ? "#ffb3bf" : "#c9ced8"   // 11-12 Fable: legible sobre el chip
                             rotation: root.expanded ? 180 : 0
                             Layout.topMargin: root.expanded ? -Math.floor(Tokens.padding.extraSmall) : 0
 

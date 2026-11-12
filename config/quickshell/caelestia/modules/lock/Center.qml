@@ -5,6 +5,8 @@ import Caelestia.Config
 import qs.components
 import qs.services
 
+// 11-12 Fable: ZANGETSU arriba, reloj Anton con los dos cuadritos rojos, fecha espaciada y la contraseña.
+// La lógica de la contraseña (PasswordInput / InputField / Pam) no se toca. Original: Center.qml.antes-fable
 ColumnLayout {
     id: root
 
@@ -12,32 +14,41 @@ ColumnLayout {
     readonly property real centerScale: Math.min(1, (lock.screen?.height ?? 1440) / 1440)
     readonly property int centerWidth: Tokens.sizes.lock.centerWidth * centerScale
 
-    Layout.preferredWidth: centerWidth
-    Layout.fillWidth: false
-    Layout.fillHeight: true
+    width: centerWidth
+    spacing: 0
 
-    spacing: Tokens.spacing.largeIncreased
+    Item { Layout.fillHeight: true }
+
+    Text {
+        Layout.alignment: Qt.AlignHCenter
+        text: "ZANGETSU"
+        color: Qt.rgba(0.94, 0.90, 0.85, 0.6)
+        font.family: "Cinzel"
+        font.pixelSize: Math.round(18 * root.centerScale)
+        font.letterSpacing: 10
+        leftPadding: 10
+    }
+
+    Item { Layout.preferredHeight: 28 * root.centerScale }
 
     Clock {
         Layout.alignment: Qt.AlignHCenter
-        Layout.topMargin: Tokens.padding.large
         centerScale: root.centerScale
     }
 
-    StyledText {
-        Layout.alignment: Qt.AlignHCenter
+    Item { Layout.preferredHeight: 18 * root.centerScale }
 
-        text: Time.format("dddd • d MMM").toUpperCase()
-        color: "#ff7a8e"
-        font: Tokens.font.title.builders.medium.weight(Font.DemiBold).build()
+    Text {
+        Layout.alignment: Qt.AlignHCenter
+        // se refresca cada minuto con el reloj
+        text: (Time.minuteStr, Qt.locale("es_MX").toString(new Date(), "dddd d 'de' MMMM").toUpperCase())
+        color: Qt.rgba(0.94, 0.90, 0.85, 0.75)
+        font.pixelSize: Math.round(17 * root.centerScale)
+        font.weight: Font.Medium
+        font.letterSpacing: 5
     }
 
-    ProfilePic {
-        Layout.alignment: Qt.AlignHCenter
-        Layout.topMargin: Tokens.spacing.extraExtraLarge * root.centerScale
-        Layout.bottomMargin: Tokens.spacing.extraLarge * root.centerScale
-        centerWidth: root.centerWidth
-    }
+    Item { Layout.preferredHeight: 48 * root.centerScale }
 
     PasswordInput {
         Layout.alignment: Qt.AlignHCenter
@@ -50,4 +61,6 @@ ColumnLayout {
         Layout.fillWidth: true
         pam: root.lock.pam
     }
+
+    Item { Layout.fillHeight: true }
 }

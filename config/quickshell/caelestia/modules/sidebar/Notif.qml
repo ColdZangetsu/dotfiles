@@ -23,7 +23,7 @@ StyledRect {
 
     radius: Tokens.rounding.medium
     color: {
-        const c = root.modelData?.urgency === "critical" ? Colours.of(QsWindow.window ?? this).palette.m3secondaryContainer : Colours.layer(Colours.of(QsWindow.window ?? this).palette.m3surfaceContainerHigh, 2);
+        const c = root.modelData?.urgency === "critical" ? Qt.color("#2a1418") : Qt.color("#1d2129");   // 11-12 Fable
         return expanded ? c : Qt.alpha(c, 0);
     }
 

@@ -2,94 +2,39 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Caelestia.Config
-import Caelestia.I18n
-import qs.components
 import qs.services
-import Quickshell
 
-Item {
+// 11-12 Fable: el mismo reloj del XENEON — Anton enorme, horas y minutos en hueso, dos cuadritos rojos.
+// Original: center/Clock.qml.antes-fable
+Row {
     id: root
 
     required property real centerScale
+    readonly property int tam: Math.round(220 * centerScale)
 
-    function calcTopOff(metrics: TextMetrics): real {
-        return metrics.tightBoundingRect.y - metrics.boundingRect.y;
-    }
+    spacing: Math.round(18 * centerScale)
 
-    implicitWidth: hours.implicitWidth + minutes.implicitWidth + Tokens.spacing.small
-    implicitHeight: hourMetrics.tightBoundingRect.height
-
-    StyledText {
-        id: hours
-
-        y: -root.calcTopOff(hourMetrics)
+    Text {
         text: Time.hourStr
         color: "#fff1f3"
-        font: Tokens.font.headline.builders.large.scale(7 * root.centerScale).width(30).build()
-
-        TextMetrics {
-            id: hourMetrics
-
-            text: hours.text
-            font: hours.font
-        }
+        font.family: "Anton"
+        font.pixelSize: root.tam
+        anchors.verticalCenter: parent.verticalCenter
     }
 
-    StyledText {
-        id: minutes
+    Column {
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Math.round(root.tam * 0.16)
 
-        anchors.right: parent.right
-        y: -root.calcTopOff(minuteMetrics)
+        Rectangle { width: Math.round(root.tam * 0.11); height: width; radius: 3; color: "#ff2448" }
+        Rectangle { width: Math.round(root.tam * 0.11); height: width; radius: 3; color: "#ff2448" }
+    }
 
+    Text {
         text: Time.minuteStr
-        color: "#ff2448"
-        font: Tokens.font.headline.builders.large.scale((Units.twelveHourClock ? 3.8 : 7) * root.centerScale).width(30).build()
-
-        TextMetrics {
-            id: minuteMetrics
-
-            text: minutes.text
-            font: minutes.font
-        }
-    }
-
-    Loader {
-        anchors.left: minutes.left
-        anchors.leftMargin: minuteMetrics.tightBoundingRect.x
-        y: hourMetrics.tightBoundingRect.height - implicitHeight
-
-        active: Units.twelveHourClock
-        asynchronous: true
-
-        sourceComponent: StyledRect {
-            color: Colours.of(QsWindow.window ?? this).tPalette.m3surfaceContainerHigh
-            radius: Tokens.rounding.large
-
-            implicitWidth: minuteMetrics.tightBoundingRect.width
-            implicitHeight: amPmMetrics.tightBoundingRect.height + Tokens.padding.large * 2
-
-            StyledText {
-                id: amPm
-
-                anchors.centerIn: parent
-                width: amPmMetrics.tightBoundingRect.width
-                height: amPmMetrics.tightBoundingRect.height
-                transform: Translate {
-                    x: -amPmMetrics.tightBoundingRect.x
-                    y: -root.calcTopOff(amPmMetrics)
-                }
-
-                text: Time.amPmStr
-                color: Colours.of(QsWindow.window ?? this).palette.m3onSurface
-                font: Tokens.font.headline.builders.small.scale(2 * root.centerScale).width(30).build()
-
-                TextMetrics {
-                    id: amPmMetrics
-
-                    text: amPm.text
-                    font: amPm.font
-                }
-            }
-        }
+        color: "#fff1f3"
+        font.family: "Anton"
+        font.pixelSize: root.tam
+        anchors.verticalCenter: parent.verticalCenter
     }
 }

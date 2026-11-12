@@ -12,7 +12,8 @@ import qs.modules.bar.components.status
 StyledRect {
     id: root
 
-    property color colour: Colours.of(QsWindow.window ?? this).palette.m3secondary
+    // 11-12 Fable: íconos de estado sin cápsula, en hueso (original: StatusIcons.qml.antes-fable)
+    property color colour: "#d9efe6d8"
     readonly property alias items: iconColumn
 
     readonly property int spacing: Tokens.spacing.medium / 2
@@ -40,7 +41,7 @@ StyledRect {
         return false;
     }
 
-    color: Colours.of(QsWindow.window ?? this).tPalette.m3surfaceContainer
+    color: "transparent"
     radius: Tokens.rounding.full
 
     clip: true

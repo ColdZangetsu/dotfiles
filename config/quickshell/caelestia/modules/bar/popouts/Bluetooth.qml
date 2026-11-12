@@ -7,199 +7,166 @@ import Quickshell.Bluetooth
 import Caelestia.Config
 import Caelestia.I18n
 import qs.components
-import qs.components.controls
 import qs.services
 import qs.utils
 
+// 11-12 Fable "tinta y filo" (popout de Bluetooth). Original: Bluetooth.qml.antes-fable
+// Cabecera + interruptor, CONECTADOS / GUARDADOS, filo rojo en lo conectado, batería en Anton.
 ColumnLayout {
     id: root
 
     required property PopoutState popouts
 
+    readonly property color hueso: "#efe6d8"
+    readonly property color huesoAlto: "#fff1f3"
+    readonly property color tenue: "#a0a8b8"
+    readonly property color apagado: "#6b7180"
+    readonly property color rojo: "#ff2448"
+    readonly property var adaptador: Bluetooth.defaultAdapter // qmllint disable unresolved-type
+    readonly property var todos: [...Bluetooth.devices.values].sort((a, b) => a.name.localeCompare(b.name)) // qmllint disable unresolved-type
+    readonly property var conectados: todos.filter(d => d.connected)
+    readonly property var guardados: todos.filter(d => !d.connected && d.paired).slice(0, 5)
+
     width: 300
-    spacing: Tokens.spacing.small
+    spacing: 6
 
-    StyledText {
-        Layout.topMargin: Tokens.padding.medium
-        Layout.rightMargin: Tokens.padding.extraSmall
-        text: Tr.tr("Bluetooth")
-        font: Tokens.font.body.builders.medium.weight(Font.Medium).build()
-    }
+    RowLayout {
+        Layout.fillWidth: true
+        Layout.topMargin: 14
+        Layout.leftMargin: 4
+        Layout.rightMargin: 4
 
-    Toggle {
-        label: Tr.trCtx("Enabled", "toggle label")
-        checked: Bluetooth.defaultAdapter?.enabled ?? false // qmllint disable unresolved-type
-        toggle.onToggled: {
-            const adapter = Bluetooth.defaultAdapter; // qmllint disable unresolved-type
-            if (adapter)
-                adapter.enabled = checked;
+        Text {
+            text: "BLUETOOTH"
+            color: root.tenue
+            font.family: "Anton"
+            font.pixelSize: 15
+            font.letterSpacing: 3
+        }
+        Item { Layout.fillWidth: true }
+        Interruptor {
+            encendido: root.adaptador?.enabled ?? false
+            onCambiar: { if (root.adaptador) root.adaptador.enabled = !root.adaptador.enabled; }
         }
     }
 
-    Toggle {
-        label: Tr.trCtx("Discovering", "bluetooth adapter state")
-        checked: Bluetooth.defaultAdapter?.discovering ?? false // qmllint disable unresolved-type
-        toggle.onToggled: {
-            const adapter = Bluetooth.defaultAdapter; // qmllint disable unresolved-type
-            if (adapter)
-                adapter.discovering = checked;
-        }
-    }
-
-    StyledText {
-        Layout.topMargin: Tokens.spacing.small
-        Layout.rightMargin: Tokens.padding.extraSmall
-        text: {
-            const devices = Bluetooth.devices.values; // qmllint disable unresolved-type
-            const connected = devices.filter(d => d.connected).length;
-            if (connected > 0)
-                // TRANSLATORS: %n = total paired devices, %1 = how many of them are connected
-                return Tr.trN("%n device available (%1 connected)", "%n devices available (%1 connected)", devices.length).arg(connected);
-            return Tr.trN("%n device available", "%n devices available", devices.length);
-        }
-        color: Colours.of(QsWindow.window ?? this).palette.m3onSurfaceVariant
-        font: Tokens.font.body.small
-    }
-
+    Rotulo { texto: "CONECTADOS"; visible: root.conectados.length > 0 }
     Repeater {
-        model: ScriptModel {
-            values: [...Bluetooth.devices.values].sort((a, b) => (b.connected - a.connected) || (b.paired - a.paired) || a.name.localeCompare(b.name)).slice(0, 5) // qmllint disable unresolved-type
-        }
+        model: root.conectados
+        Fila { required property var modelData; dispositivo: modelData }
+    }
 
-        RowLayout {
-            id: device
+    Rotulo { texto: "GUARDADOS"; visible: root.guardados.length > 0 }
+    Repeater {
+        model: root.guardados
+        Fila { required property var modelData; dispositivo: modelData }
+    }
 
-            required property BluetoothDevice modelData
-            readonly property bool loading: modelData.state === BluetoothDeviceState.Connecting || modelData.state === BluetoothDeviceState.Disconnecting // qmllint disable unresolved-type
+    Text {
+        visible: !(root.adaptador?.enabled ?? false)
+        Layout.leftMargin: 4
+        text: "Apagado"
+        color: root.apagado
+        font.pixelSize: 13
+    }
 
-            Layout.fillWidth: true
-            Layout.rightMargin: Tokens.padding.extraSmall
-            spacing: Tokens.spacing.small
-
-            opacity: 0
-            scale: 0.7
-
-            Component.onCompleted: {
-                opacity = 1;
-                scale = 1;
-            }
-
-            Behavior on opacity {
-                Anim {
-                    type: Anim.DefaultEffects
-                }
-            }
-
-            Behavior on scale {
-                Anim {}
-            }
-
-            MaterialIcon {
-                text: Icons.getBluetoothIcon(device.modelData.icon)
-            }
-
-            StyledText {
-                Layout.leftMargin: Tokens.spacing.extraSmall
-                Layout.rightMargin: Tokens.spacing.extraSmall
-                Layout.fillWidth: true
-                text: device.modelData.name
-                elide: Text.ElideRight
-            }
-
-            MaterialIcon {
-                visible: device.modelData.state === BluetoothDeviceState.Connected  // qmllint disable unresolved-type
-                text: device.modelData.batteryAvailable ? Icons.getBatteryIcon(device.modelData.battery) : "battery_alert"
-                color: device.modelData.batteryAvailable && device.modelData.battery < 0.2 ? Colours.of(QsWindow.window ?? this).palette.m3error : Colours.of(QsWindow.window ?? this).palette.m3onSurfaceVariant
-            }
-
-            StyledRect {
-                id: connectBtn
-
-                implicitWidth: implicitHeight
-                implicitHeight: connectIcon.implicitHeight + Tokens.padding.extraSmall
-
-                radius: Tokens.rounding.full
-                color: Qt.alpha(Colours.of(QsWindow.window ?? this).palette.m3primary, device.modelData.state === BluetoothDeviceState.Connected ? 1 : 0) // qmllint disable unresolved-type
-
-                CircularIndicator {
-                    anchors.fill: parent
-                    running: device.loading
-                }
-
-                StateLayer {
-                    color: device.modelData.state === BluetoothDeviceState.Connected ? Colours.of(QsWindow.window ?? this).palette.m3onPrimary : Colours.of(QsWindow.window ?? this).palette.m3onSurface // qmllint disable unresolved-type
-                    disabled: device.loading
-                    onClicked: device.modelData.connected = !device.modelData.connected
-                }
-
-                MaterialIcon {
-                    id: connectIcon
-
-                    anchors.centerIn: parent
-                    animate: true
-                    text: device.modelData.connected ? "link_off" : "link"
-                    color: device.modelData.state === BluetoothDeviceState.Connected ? Colours.of(QsWindow.window ?? this).palette.m3onPrimary : Colours.of(QsWindow.window ?? this).palette.m3onSurface // qmllint disable unresolved-type
-
-                    opacity: device.loading ? 0 : 1
-
-                    Behavior on opacity {
-                        Anim {
-                            type: Anim.DefaultEffects
-                        }
-                    }
-                }
-            }
-
-            Loader {
-                visible: status === Loader.Ready
-                asynchronous: true
-                active: device.modelData.bonded
-                sourceComponent: Item {
-                    implicitWidth: connectBtn.implicitWidth
-                    implicitHeight: connectBtn.implicitHeight
-
-                    StateLayer {
-                        radius: Tokens.rounding.full
-                        onClicked: device.modelData.forget()
-                    }
-
-                    MaterialIcon {
-                        anchors.centerIn: parent
-                        text: "delete"
-                    }
-                }
-            }
+    Text {
+        Layout.topMargin: 6
+        Layout.bottomMargin: 12
+        Layout.leftMargin: 4
+        text: "Ajustes de Bluetooth  ›"
+        color: aj.containsMouse ? root.hueso : root.apagado
+        font.pixelSize: 12
+        MouseArea {
+            id: aj
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.popouts.detachRequested("bluetooth")
         }
     }
 
-    IconTextButton {
-        Layout.fillWidth: true
-        Layout.topMargin: Tokens.spacing.medium
-        inactiveColour: Colours.of(QsWindow.window ?? this).palette.m3primaryContainer
-        inactiveOnColour: Colours.of(QsWindow.window ?? this).palette.m3onPrimaryContainer
-        verticalPadding: Tokens.padding.extraSmall
-        text: Tr.tr("Open settings")
-        icon: "settings"
-
-        onClicked: root.popouts.detachRequested("bluetooth")
+    component Rotulo: Text {
+        property string texto
+        Layout.topMargin: 8
+        Layout.leftMargin: 4
+        text: texto
+        color: root.apagado
+        font.family: "Anton"
+        font.pixelSize: 12
+        font.letterSpacing: 3
     }
 
-    component Toggle: RowLayout {
-        required property string label
-        property alias checked: toggle.checked
-        property alias toggle: toggle
+    component Interruptor: Rectangle {
+        id: it
+        property bool encendido
+        signal cambiar
+        implicitWidth: 40
+        implicitHeight: 22
+        radius: 11
+        color: Qt.rgba(0.94, 0.90, 0.85, encendido ? 0.18 : 0.08)
+        Rectangle {
+            width: 16; height: 16; radius: 8
+            anchors.verticalCenter: parent.verticalCenter
+            x: it.encendido ? parent.width - width - 3 : 3
+            color: it.encendido ? root.huesoAlto : "transparent"
+            border.width: it.encendido ? 0 : 1.5
+            border.color: root.tenue
+            Behavior on x { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+        }
+        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: it.cambiar() }
+    }
+
+    component Fila: Rectangle {
+        id: f
+        property var dispositivo
+        readonly property bool activa: dispositivo?.connected ?? false
+        readonly property bool cargando: dispositivo?.state === BluetoothDeviceState.Connecting || dispositivo?.state === BluetoothDeviceState.Disconnecting // qmllint disable unresolved-type
 
         Layout.fillWidth: true
-        Layout.rightMargin: Tokens.padding.extraSmall
-        spacing: Tokens.spacing.medium
+        implicitHeight: 42
+        radius: 12
+        color: activa ? "#1d2129" : (m.containsMouse ? Qt.rgba(0.94, 0.90, 0.85, 0.05) : "transparent")
+        opacity: cargando ? 0.55 : 1
 
-        StyledText {
-            Layout.fillWidth: true
-            text: parent.label
+        Rectangle {
+            visible: f.activa
+            x: 0; anchors.verticalCenter: parent.verticalCenter
+            width: 3; height: parent.height - 14; radius: 1.5
+            color: root.rojo
         }
-
-        StyledSwitch {
-            id: toggle
+        MaterialIcon {
+            anchors.left: parent.left; anchors.leftMargin: 14
+            anchors.verticalCenter: parent.verticalCenter
+            text: Icons.getBluetoothIcon(f.dispositivo?.icon ?? "")
+            color: f.activa ? root.huesoAlto : root.tenue
+        }
+        Text {
+            anchors.left: parent.left; anchors.leftMargin: 46
+            anchors.right: bat.left; anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            text: f.cargando ? (f.activa ? "Desconectando…" : "Conectando…") : (f.dispositivo?.name ?? "")
+            elide: Text.ElideRight
+            color: f.activa ? root.huesoAlto : root.hueso
+            font.pixelSize: 14
+            font.weight: f.activa ? Font.DemiBold : Font.Normal
+        }
+        Text {
+            id: bat
+            anchors.right: parent.right; anchors.rightMargin: 14
+            anchors.verticalCenter: parent.verticalCenter
+            visible: f.activa && (f.dispositivo?.batteryAvailable ?? false)
+            text: Math.round((f.dispositivo?.battery ?? 0) * 100)
+            color: (f.dispositivo?.battery ?? 1) < 0.2 ? root.rojo : root.tenue
+            font.family: "Anton"
+            font.pixelSize: 15
+        }
+        MouseArea {
+            id: m
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: { if (f.dispositivo && !f.cargando) f.dispositivo.connected = !f.dispositivo.connected; }
         }
     }
 }

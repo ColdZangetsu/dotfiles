@@ -33,7 +33,52 @@ Item {
         anchors.right: parent.right
         anchors.margins: Tokens.padding.extraSmall
 
-        implicitHeight: Math.max(count.implicitHeight, titleText.implicitHeight)
+        implicitHeight: Math.max(count.implicitHeight, titleText.implicitHeight, limpiar.implicitHeight)
+
+        // 11-12 Fable: la única acción va arriba, a la vista (antes un botón flotante abajo). Original: NotifDock.qml.antes-fable
+        Rectangle {
+            id: limpiar
+
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            implicitWidth: limpiarFila.implicitWidth + 26
+            implicitHeight: 32
+            radius: 16
+            visible: root.notifCount > 0
+            color: zonaLimpiar.containsMouse ? "#efe6d8" : "transparent"
+            border.width: 1
+            border.color: Qt.rgba(0.94, 0.90, 0.85, 0.25)
+
+            Row {
+                id: limpiarFila
+
+                anchors.centerIn: parent
+                spacing: 7
+
+                MaterialIcon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "clear_all"
+                    color: zonaLimpiar.containsMouse ? "#0c0e12" : "#efe6d8"
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "LIMPIAR"
+                    color: zonaLimpiar.containsMouse ? "#0c0e12" : "#efe6d8"
+                    font.family: "Anton"
+                    font.pixelSize: 13
+                    font.letterSpacing: 2.5
+                }
+            }
+
+            MouseArea {
+                id: zonaLimpiar
+
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: clearTimer.start()
+            }
+        }
 
         StyledText {
             id: count
@@ -44,8 +89,9 @@ Item {
             opacity: root.notifCount > 0 ? 1 : 0
 
             text: root.notifCount
-            color: Colours.of(QsWindow.window ?? this).palette.m3outline
-            font: Tokens.font.label.large
+            color: "#fff1f3"
+            font.family: "Anton"
+            font.pixelSize: 30
 
             Behavior on anchors.leftMargin {
                 Anim {}
@@ -63,13 +109,15 @@ Item {
 
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: count.right
-            anchors.right: parent.right
-            anchors.leftMargin: Tokens.spacing.extraSmall
+            anchors.right: limpiar.left
+            anchors.leftMargin: 10
+            anchors.verticalCenterOffset: 4
 
-            // TRANSLATORS: the count itself is rendered separately, immediately to the left
-            text: root.notifCount > 0 ? Tr.trCtxN("notification", "notifications", root.notifCount, "notification count label, number shown separately") : Tr.tr("Notifications")
-            color: Colours.of(QsWindow.window ?? this).palette.m3outline
-            font: Tokens.font.label.large
+            text: root.notifCount === 1 ? "AVISO" : "AVISOS"
+            color: "#a0a8b8"
+            font.family: "Anton"
+            font.pixelSize: 15
+            font.letterSpacing: 3
             elide: Text.ElideRight
         }
     }
@@ -92,27 +140,24 @@ Item {
             active: opacity > 0
             opacity: root.notifCount > 0 ? 0 : 1
 
-            sourceComponent: ColumnLayout {
-                spacing: Tokens.spacing.extraLarge
+            sourceComponent: Column {
+                spacing: 18
 
-                Image {
-                    asynchronous: true
-                    source: Paths.absolutePath(Config.paths.noNotifsPic)
-                    fillMode: Image.PreserveAspectFit
-                    sourceSize.width: clipRect.width * 0.8 * ((QsWindow.window as QsWindow)?.devicePixelRatio ?? 1)
-
-                    layer.enabled: true
-                    layer.effect: Colouriser {
-                        colorizationColor: Colours.of(QsWindow.window ?? this).palette.m3outlineVariant
-                        brightness: 1
-                    }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "無"
+                    color: Qt.rgba(0.94, 0.90, 0.85, 0.22)
+                    font.family: "Noto Serif CJK JP"
+                    font.weight: Font.Light
+                    font.pixelSize: 120
                 }
-
-                StyledText {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: Tr.tr("All up to date!")
-                    color: Colours.of(QsWindow.window ?? this).palette.m3outlineVariant
-                    font: Tokens.font.headline.builders.small.width(90).build()
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "NADA PENDIENTE"
+                    color: "#6b7180"
+                    font.family: "Anton"
+                    font.pixelSize: 14
+                    font.letterSpacing: 3
                 }
             }
 
@@ -168,44 +213,6 @@ Item {
                     interval = 5;
                     return;
                 }
-            }
-        }
-    }
-
-    Loader {
-        asynchronous: true
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.margins: Tokens.padding.medium
-
-        scale: root.notifCount > 0 ? 1 : 0.5
-        opacity: root.notifCount > 0 ? 1 : 0
-        active: opacity > 0
-
-        sourceComponent: IconButton {
-            id: clearBtn
-
-            icon: "clear_all"
-            font: Tokens.font.icon.large
-            onClicked: clearTimer.start()
-
-            Elevation {
-                anchors.fill: parent
-                radius: parent.radius
-                z: -1
-                level: clearBtn.stateLayer.containsMouse ? 4 : 3
-            }
-        }
-
-        Behavior on scale {
-            Anim {
-                type: Anim.FastSpatial
-            }
-        }
-
-        Behavior on opacity {
-            Anim {
-                type: Anim.DefaultEffects
             }
         }
     }

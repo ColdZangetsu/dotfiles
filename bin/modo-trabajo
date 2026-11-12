@@ -50,6 +50,9 @@ on() {
 
     # Fondos cerrados (liberan VRAM; pausados la seguirían ocupando)
     for m in "${REAL[@]}"; do ~/.local/bin/wallmuxctl stop-video --monitor "$m" >/dev/null 2>&1; done
+    # 11-12: los fondos de Wallpaper Engine (escenas en tiempo real, p. ej. el cerezo del XENEON) tampoco corren en modo trabajo:
+    # se matan los procesos pero NO se borra su estado (wallmux-we restore los vuelve a arrancar al volver a casa)
+    pkill -x linux-wallpaper >/dev/null 2>&1; sleep 1; pkill -KILL -x linux-wallpaper >/dev/null 2>&1   # con los monitores apagados ignora SIGTERM
 
     # Sin bloqueo ni apagado por inactividad, y que el mouse/teclado del iPad no prenda los monitores
     qs -c caelestia ipc call idleInhibitor enable >/dev/null 2>&1
@@ -80,6 +83,7 @@ off() {
     systemctl --user restart xdg-desktop-portal-hyprland   # olvida el permiso de captura de STREAM
 
     ~/.local/bin/wallmuxctl restore >/dev/null 2>&1
+    ~/.local/bin/wallmux-we restore >/dev/null 2>&1   # 11-12: vuelve a arrancar las escenas de Wallpaper Engine (cerezo del XENEON)
     (~/.local/bin/govee on --forzar && ~/.local/bin/govee fondo --forzar) >/dev/null 2>&1   # también con candado (2026-11-09, pedido del usuario)
     ~/.local/bin/teclado-luz on >/dev/null 2>&1
     rm -f "$ESTADO"

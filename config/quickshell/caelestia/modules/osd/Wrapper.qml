@@ -29,6 +29,10 @@ Item {
     property bool verVolumen
     property bool verBrillo
     property bool verLuces
+    property bool controlActivo   // abierto con xeneon-control: se queda ~25 s para tocar con calma
+    function reiniciaTemporizador(): void {
+        timer.restart();
+    }
 
     function show(que: string): void {
         if (que === "luces")
@@ -43,6 +47,7 @@ Item {
 
     // Al acercar el mouse al borde derecho el OSD se abre solo (sin tocar nada): enseña las tres barras
     function verTodas(): void {
+        LucesAmbiente.refrescar();
         verVolumen = true;
         verBrillo = true;
         verLuces = true;
@@ -62,8 +67,22 @@ Item {
         target: root.screenState
     }
 
+    Connections {
+        function onControlPantalla(pantalla: string): void {
+            if (root.screen.name !== pantalla)
+                return;
+            root.controlActivo = true;
+            root.verTodas();
+            root.screenState.osd = true;
+            timer.restart();
+        }
+
+        target: LucesAmbiente
+    }
+
     onVisibleChanged: {
         if (!visible) {
+            controlActivo = false;
             verVolumen = false;
             verBrillo = false;
             verLuces = false;
@@ -132,7 +151,7 @@ Item {
     Timer {
         id: timer
 
-        interval: root.Config.osd.hideDelay
+        interval: root.controlActivo ? 25000 : root.Config.osd.hideDelay
         onTriggered: {
             if (!root.hovered)
                 root.screenState.osd = false;
@@ -160,6 +179,7 @@ Item {
             verVolumen: root.verVolumen
             verBrillo: root.verBrillo
             verLuces: root.verLuces
+            onActividad: root.reiniciaTemporizador()
         }
     }
 }

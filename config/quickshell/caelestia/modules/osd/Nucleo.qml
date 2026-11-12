@@ -33,7 +33,7 @@ Item {
     readonly property bool presionado: ma.pressed
     readonly property bool encima: ma.containsMouse
     readonly property real yPerilla: yDe(pos)
-    readonly property bool focoTeclado: activeFocus && (focusReason === Qt.TabFocusReason || focusReason === Qt.BacktabFocusReason)
+    readonly property bool focoTeclado: activeFocus && typeof focusReason !== "undefined" && (focusReason === Qt.TabFocusReason || focusReason === Qt.BacktabFocusReason)
     property bool quieto: true
     property bool ocupado: false           // la barra puede pedir más latidos (efectos propios)
 

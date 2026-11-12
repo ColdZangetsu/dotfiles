@@ -84,17 +84,30 @@ StyledListView {
     highlightRangeMode: ListView.ApplyRange
 
     highlightFollowsCurrentItem: false
-    highlight: StyledRect {
-        radius: Tokens.rounding.large
-        color: Colours.of(QsWindow.window ?? this).palette.m3onSurface
-        opacity: 0.08
-
+    // 11-12 Fable "tinta y filo": fila elegida apenas más clara + filo rojo que se desliza con las flechas
+    // (original: AppList.qml.antes-fable)
+    highlight: Item {
         y: root.currentItem?.y ?? 0
         implicitWidth: root.width
         implicitHeight: root.currentItem?.implicitHeight ?? 0
 
         Behavior on y {
             Anim {}
+        }
+
+        StyledRect {
+            anchors.fill: parent
+            radius: 12
+            color: Qt.rgba(0.94, 0.90, 0.85, 0.07)
+        }
+
+        Rectangle {
+            x: 0
+            anchors.verticalCenter: parent.verticalCenter
+            width: 3
+            height: Math.max(0, parent.height - 16)
+            radius: 1.5
+            color: "#ff2448"
         }
     }
 

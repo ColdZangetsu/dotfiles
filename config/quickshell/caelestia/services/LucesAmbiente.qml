@@ -15,6 +15,7 @@ Singleton {
     property real pendiente: -1
     property real ultimo: -1
     signal mostrar
+    signal controlPantalla(string pantalla)   // 11-12: `xeneon-control` pide mostrar las 3 barras (y mantenerlas) en esa pantalla
 
     // Mientras arrastras: como mucho una orden cada 140 ms (+ la última al soltar)
     function set(v: real): void {
@@ -50,6 +51,26 @@ Singleton {
         }
     }
 
+    // 11-12: al abrir la barra se lee el estado REAL de las luces (por si Nero u otro cambió algo) y la barra se acomoda
+    function refrescar(): void {
+        if (pendiente < 0 && !proc.running && !lector.running)
+            lector.running = true;
+    }
+
+    Process {
+        id: lector
+        command: [root.script, "leer"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                const v = parseFloat(text);
+                if (!isNaN(v) && root.pendiente < 0 && !proc.running)
+                    root.value = Math.max(0, Math.min(1, v));
+            }
+        }
+    }
+
+    onMostrar: refrescar()
+
     // valor guardado (para empezar en el sitio donde quedó)
     FileView {
         path: root.dir + "/valor"
@@ -69,6 +90,18 @@ Singleton {
         onFileChanged: {
             reload();
             root.mostrar();
+        }
+    }
+
+    // xeneon-control escribe "<pantalla> <hora>" aquí
+    FileView {
+        path: root.dir + "/control"
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: {
+            const p = text().trim().split(" ")[0];
+            if (p.length > 0)
+                root.controlPantalla(p);
         }
     }
 }

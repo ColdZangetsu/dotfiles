@@ -40,7 +40,7 @@ local todo_app_tag = "todo_app"
 ----------------------
 
 -- Apply default opacity to all windows except fullscreen
-hl.window_rule({ match = { fullscreen = false }, opacity = vars.windowOpacity .. " override" })
+hl.window_rule({ match = { fullscreen = false }, opacity = "0.94 override 0.88 override" })   -- 11-12 receta Fable: activa 0.94 / inactiva 0.88 (antes vars.windowOpacity)
 
 -- Center all floating windows except xwayland windows (xwayland popups count as windows)
 hl.window_rule({ match = { float = true, xwayland = false }, center = true })

@@ -38,10 +38,11 @@ TextField {
 
         x: root.cursorRectangle.x
         y: root.cursorRectangle.y
-        implicitWidth: 1.5
+        implicitWidth: 2
         implicitHeight: root.cursorRectangle.height
 
-        color: Colours.of(QsWindow.window ?? this).palette.m3primary
+        // 11-12 Fable: el cursor de texto es una hoja roja (original: TextFieldBase.qml.antes-fable)
+        color: "#ff2448"
         radius: Tokens.rounding.large
 
         Connections {

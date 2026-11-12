@@ -1,118 +1,207 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell.Services.Pipewire
 import Caelestia.Config
 import Caelestia.I18n
 import qs.components
-import qs.components.controls
 import qs.services
 import Quickshell
 
+// 11-12 Fable "tinta y filo" (popout de audio). Original: AudioPopout.qml.antes-fable
+// Cabecera VOLUMEN + número en Anton, riel con marca fija del 40 %, y filas de salida/entrada
+// donde un filo rojo marca la que está en uso.
 Item {
     id: root
 
     required property PopoutState popouts
 
-    implicitWidth: Tokens.sizes.bar.audioWidth
-    implicitHeight: layout.implicitHeight + Tokens.padding.medium * 2
+    readonly property color hueso: "#efe6d8"
+    readonly property color huesoAlto: "#fff1f3"
+    readonly property color tenue: "#a0a8b8"
+    readonly property color apagado: "#6b7180"
+    readonly property color rojo: "#ff2448"
+    readonly property color fila: "#1d2129"
 
-    ButtonGroup {
-        id: sinks
-    }
-
-    ButtonGroup {
-        id: sources
-    }
+    implicitWidth: 300
+    implicitHeight: col.implicitHeight + 28
 
     ColumnLayout {
-        id: layout
+        id: col
 
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: Tokens.spacing.medium
+        anchors.top: parent.top
+        anchors.margins: 14
+        spacing: 6
 
-        StyledText {
-            text: Tr.trCtx("Output device", "audio output device")
-            font: Tokens.font.body.builders.medium.weight(Font.Medium).build()
+        // ---- cabecera ----
+        RowLayout {
+            Layout.fillWidth: true
+
+            Text {
+                text: Audio.muted ? "SILENCIO" : "VOLUMEN"
+                color: root.tenue
+                font.family: "Anton"
+                font.pixelSize: 15
+                font.letterSpacing: 3
+                Layout.alignment: Qt.AlignBottom
+                bottomPadding: 6
+            }
+            Item { Layout.fillWidth: true }
+            Text {
+                text: Math.round(Audio.volume * 100)
+                color: root.huesoAlto
+                font.family: "Anton"
+                font.pixelSize: 34
+            }
+            Text {
+                text: "%"
+                color: root.apagado
+                font.family: "Anton"
+                font.pixelSize: 14
+                Layout.alignment: Qt.AlignBottom
+                bottomPadding: 5
+            }
         }
 
+        // ---- riel ----
+        Item {
+            id: riel
+
+            readonly property real v: Math.max(0, Math.min(1, Audio.volume))
+            Layout.fillWidth: true
+            implicitHeight: 26
+
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width; height: 4; radius: 2
+                color: Qt.rgba(0.94, 0.90, 0.85, 0.12)
+            }
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width * riel.v; height: 4; radius: 2
+                color: zona.pressed ? root.rojo : root.hueso
+            }
+            Rectangle {   // marca fija del 40 % (nivel seguro)
+                x: parent.width * 0.4 - 1
+                anchors.verticalCenter: parent.verticalCenter
+                width: 2; height: 12; radius: 1
+                color: Qt.rgba(0.94, 0.90, 0.85, 0.35)
+            }
+            Rectangle {   // perilla: aparece al acercar el cursor, roja solo al arrastrar
+                x: parent.width * riel.v - width / 2
+                anchors.verticalCenter: parent.verticalCenter
+                width: 14; height: 14; radius: 7
+                color: zona.pressed ? root.rojo : root.huesoAlto
+                opacity: zona.containsMouse || zona.pressed ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: 120 } }
+            }
+            MouseArea {
+                id: zona
+                anchors.fill: parent
+                hoverEnabled: true
+                function poner(x) { Audio.setVolume(Math.max(0, Math.min(1, x / width))); }
+                onPressed: e => poner(e.x)
+                onPositionChanged: e => { if (pressed) poner(e.x); }
+                onWheel: e => { if (e.angleDelta.y > 0) Audio.incrementVolume(); else if (e.angleDelta.y < 0) Audio.decrementVolume(); }
+            }
+        }
+
+        Rectangle { Layout.fillWidth: true; Layout.topMargin: 4; implicitHeight: 1; color: Qt.rgba(0.94, 0.90, 0.85, 0.08) }
+
+        Rotulo { texto: "SALIDA" }
         Repeater {
             model: Audio.sinks
-
-            StyledRadioButton {
-                id: control
-
+            Fila {
                 required property PwNode modelData
-
-                Layout.fillWidth: true
-                ButtonGroup.group: sinks
-                checked: Audio.sink?.id === modelData.id
-                onClicked: Audio.setAudioSink(modelData)
-                text: modelData.description
+                nodo: modelData
+                activa: Audio.sink?.id === modelData.id
+                icono: (modelData.description ?? "").match(/BTD|Sennheiser|aud[ií]fono|headset|headphone/i) ? "headphones"
+                     : (modelData.description ?? "").match(/HDMI|LG|monitor|ULTRAGEAR/i) ? "desktop_windows" : "speaker"
+                onElegida: Audio.setAudioSink(modelData)
             }
         }
 
-        StyledText {
-            Layout.topMargin: Tokens.spacing.medium
-            text: Tr.trCtx("Input device", "audio input device")
-            font: Tokens.font.body.builders.medium.weight(Font.Medium).build()
-        }
-
+        Rotulo { texto: "ENTRADA" }
         Repeater {
             model: Audio.sources
-
-            StyledRadioButton {
+            Fila {
                 required property PwNode modelData
-
-                Layout.fillWidth: true
-                ButtonGroup.group: sources
-                checked: Audio.source?.id === modelData.id
-                onClicked: Audio.setAudioSource(modelData)
-                text: modelData.description
+                nodo: modelData
+                activa: Audio.source?.id === modelData.id
+                icono: "mic"
+                onElegida: Audio.setAudioSource(modelData)
             }
         }
 
-        StyledText {
-            Layout.topMargin: Tokens.spacing.medium
-            text: Audio.muted ? Tr.tr("Volume (muted)") : Tr.tr("Volume (%1%)").arg(Math.round(Audio.volume * 100))
-            font: Tokens.font.body.builders.medium.weight(Font.Medium).build()
-        }
-
-        CustomMouseArea {
-            Layout.fillWidth: true
-            implicitHeight: Tokens.padding.medium * 3
-
-            onWheel: event => {
-                if (event.angleDelta.y > 0)
-                    Audio.incrementVolume();
-                else if (event.angleDelta.y < 0)
-                    Audio.decrementVolume();
-            }
-
-            StyledSlider {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                implicitHeight: parent.implicitHeight
-
-                value: Audio.volume
-                onInteraction: value => Audio.setVolume(value)
+        // ---- ajustes (discreto) ----
+        Text {
+            Layout.topMargin: 6
+            text: "Ajustes de audio  ›"
+            color: ajustes.containsMouse ? root.hueso : root.apagado
+            font.pixelSize: 12
+            MouseArea {
+                id: ajustes
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.popouts.detachRequested("audio")
             }
         }
+    }
 
-        IconTextButton {
-            Layout.fillWidth: true
-            Layout.topMargin: Tokens.spacing.medium
-            inactiveColour: Colours.of(QsWindow.window ?? this).palette.m3primaryContainer
-            inactiveOnColour: Colours.of(QsWindow.window ?? this).palette.m3onPrimaryContainer
-            verticalPadding: Tokens.padding.extraSmall
-            text: Tr.tr("Open settings")
-            icon: "settings"
+    component Rotulo: Text {
+        property string texto
+        Layout.topMargin: 8
+        text: texto
+        color: root.apagado
+        font.family: "Anton"
+        font.pixelSize: 12
+        font.letterSpacing: 3
+    }
 
-            onClicked: root.popouts.detachRequested("audio")
+    component Fila: Rectangle {
+        id: f
+        property PwNode nodo
+        property bool activa
+        property string icono
+        signal elegida
+
+        Layout.fillWidth: true
+        implicitHeight: 40
+        radius: 12
+        color: activa ? root.fila : (m.containsMouse ? Qt.rgba(0.94, 0.90, 0.85, 0.05) : "transparent")
+
+        Rectangle {   // filo
+            visible: f.activa
+            x: 0; anchors.verticalCenter: parent.verticalCenter
+            width: 3; height: parent.height - 14; radius: 1.5
+            color: root.rojo
+        }
+        MaterialIcon {
+            anchors.left: parent.left; anchors.leftMargin: 14
+            anchors.verticalCenter: parent.verticalCenter
+            text: f.icono
+            color: f.activa ? root.huesoAlto : root.tenue
+        }
+        Text {
+            anchors.left: parent.left; anchors.leftMargin: 46
+            anchors.right: parent.right; anchors.rightMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
+            text: f.nodo?.description ?? ""
+            elide: Text.ElideRight
+            color: f.activa ? root.huesoAlto : root.hueso
+            font.pixelSize: 14
+            font.weight: f.activa ? Font.DemiBold : Font.Normal
+        }
+        MouseArea {
+            id: m
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: f.elegida()
         }
     }
 }

@@ -15,6 +15,12 @@ hl.config({
             input_methods     = vars.blurInputMethods,
             size              = vars.blurSize,
             passes            = vars.blurPasses,
+            -- 11-12 receta Fable: cristal más oscuro y cremoso (costo casi nulo)
+            brightness        = 0.80,
+            contrast          = 0.95,
+            vibrancy          = 0.22,
+            vibrancy_darkness = 0.30,
+            noise             = 0.02,
         },
 
         shadow = {
