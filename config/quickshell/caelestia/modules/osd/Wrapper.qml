@@ -25,9 +25,49 @@ Item {
     property bool sourceMuted
     property real brightness
 
-    function show(): void {
+    // 11-12: el OSD solo enseña la barra que tocaste (volumen / brillo / luces)
+    property bool verVolumen
+    property bool verBrillo
+    property bool verLuces
+
+    function show(que: string): void {
+        if (que === "luces")
+            verLuces = true;
+        else if (que === "brillo")
+            verBrillo = true;
+        else
+            verVolumen = true;
         screenState.osd = true;
         timer.restart();
+    }
+
+    // Al acercar el mouse al borde derecho el OSD se abre solo (sin tocar nada): enseña las tres barras
+    function verTodas(): void {
+        verVolumen = true;
+        verBrillo = true;
+        verLuces = true;
+    }
+
+    onHoveredChanged: {
+        if (hovered)
+            verTodas();
+    }
+
+    Connections {
+        function onOsdChanged(): void {
+            if (root.screenState.osd && !root.verVolumen && !root.verBrillo && !root.verLuces)
+                root.verTodas();
+        }
+
+        target: root.screenState
+    }
+
+    onVisibleChanged: {
+        if (!visible) {
+            verVolumen = false;
+            verBrillo = false;
+            verLuces = false;
+        }
     }
 
     Component.onCompleted: {
@@ -50,22 +90,22 @@ Item {
 
     Connections {
         function onMutedChanged(): void {
-            root.show();
+            root.show("volumen");
             root.muted = Audio.muted;
         }
 
         function onVolumeChanged(): void {
-            root.show();
+            root.show("volumen");
             root.volume = Audio.volume;
         }
 
         function onSourceMutedChanged(): void {
-            root.show();
+            root.show("volumen");
             root.sourceMuted = Audio.sourceMuted;
         }
 
         function onSourceVolumeChanged(): void {
-            root.show();
+            root.show("volumen");
             root.sourceVolume = Audio.sourceVolume;
         }
 
@@ -74,11 +114,19 @@ Item {
 
     Connections {
         function onBrightnessChanged(): void {
-            root.show();
+            root.show("brillo");
             root.brightness = root.monitor?.brightness ?? 0;
         }
 
         target: root.monitor
+    }
+
+    Connections {
+        function onMostrar(): void {
+            root.show("luces");
+        }
+
+        target: LucesAmbiente
     }
 
     Timer {
@@ -98,7 +146,8 @@ Item {
         anchors.left: parent.left
 
         asynchronous: true
-        active: root.shouldBeActive || root.visible
+        // 11-12: ya no se destruye al ocultarse (crear las 3 barras en cada apertura hacía lag)
+        active: true
 
         sourceComponent: Content {
             monitor: root.monitor
@@ -108,6 +157,9 @@ Item {
             sourceVolume: root.sourceVolume
             sourceMuted: root.sourceMuted
             brightness: root.brightness
+            verVolumen: root.verVolumen
+            verBrillo: root.verBrillo
+            verLuces: root.verLuces
         }
     }
 }

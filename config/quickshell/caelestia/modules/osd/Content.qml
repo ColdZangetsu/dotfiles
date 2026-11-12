@@ -9,6 +9,8 @@ import qs.components.controls
 import qs.services
 import qs.utils
 
+// 11-12: OSD con las barras de Fable (Reiatsu / Eclipse / Amanecer pixel). Original en modules/osd.bak-barras.
+// Solo se ve la barra que tocaste: volumen, brillo o luces (Super+L).
 Item {
     id: root
 
@@ -21,43 +23,54 @@ Item {
     required property bool sourceMuted
     required property real brightness
 
-    implicitWidth: layout.implicitWidth + Tokens.padding.large + layout.anchors.horizontalCenterOffset * 2
-    implicitHeight: layout.implicitHeight + Tokens.padding.large * 2
+    property bool verVolumen
+    property bool verBrillo
+    property bool verLuces
+
+    readonly property real escala: 0.6   // tamaño: 0.6 = ~43x192 px (parecido a las barras viejas)
+    readonly property real margen: 12    // aire para el aura, la burbuja y el tajo que se salen de la barra
+    readonly property real maxVol: Math.max(0.01, GlobalConfig.services.maxVolume)
+
+    implicitWidth: fila.implicitWidth + Tokens.padding.large
+    implicitHeight: fila.implicitHeight + Tokens.padding.large
 
     ColumnLayout {
-        id: layout
+        id: fila
 
         anchors.centerIn: parent
-        anchors.horizontalCenterOffset: CUtils.clamp(Tokens.padding.large - Config.border.thickness, 0, Tokens.padding.large) / 2
-        spacing: Tokens.spacing.medium
+        spacing: 0
 
-        // Speaker volume
-        CustomMouseArea {
-            function onWheel(event: WheelEvent) {
-                if (event.angleDelta.y > 0)
-                    Audio.incrementVolume();
-                else if (event.angleDelta.y < 0)
-                    Audio.decrementVolume();
-            }
+        // Luces del cuarto — Amanecer pixel (Super+L)
+        Ranura {
+            activo: root.verLuces
 
-            implicitWidth: Tokens.sizes.osd.sliderWidth
-            implicitHeight: Tokens.sizes.osd.sliderHeight
-
-            FilledSlider {
-                anchors.fill: parent
-
-                icon: Icons.getVolumeIcon(value, root.muted)
-                value: root.volume
-                to: GlobalConfig.services.maxVolume
-                onMoved: Audio.setVolume(value)
+            BarraLuces {
+                anchors.centerIn: parent
+                scale: root.escala
+                despierto: root.screenState.osd
+                value: LucesAmbiente.value
+                onMovida: v => LucesAmbiente.set(v)
             }
         }
 
-        // Microphone volume
-        WrappedLoader {
-            shouldBeActive: Config.osd.enableMicrophone && (!Config.osd.enableBrightness || !root.screenState.session)
+        // Volumen — Reiatsu
+        Ranura {
+            activo: root.verVolumen
 
-            sourceComponent: CustomMouseArea {
+            BarraVolumen {
+                anchors.centerIn: parent
+                scale: root.escala
+                despierto: root.screenState.osd
+                value: Math.min(1, root.volume / root.maxVol)
+                onMovida: v => Audio.setVolume(v * root.maxVol)
+            }
+        }
+
+        // Micrófono (la barra de siempre, solo si lo activaste en la config)
+        Ranura {
+            activo: root.verVolumen && Config.osd.enableMicrophone
+
+            CustomMouseArea {
                 function onWheel(event: WheelEvent) {
                     if (event.angleDelta.y > 0)
                         Audio.incrementSourceVolume();
@@ -65,6 +78,7 @@ Item {
                         Audio.decrementSourceVolume();
                 }
 
+                anchors.centerIn: parent
                 implicitWidth: Tokens.sizes.osd.sliderWidth
                 implicitHeight: Tokens.sizes.osd.sliderHeight
 
@@ -79,43 +93,27 @@ Item {
             }
         }
 
-        // Brightness
-        WrappedLoader {
-            shouldBeActive: Config.osd.enableBrightness
+        // Brillo — Eclipse
+        Ranura {
+            activo: root.verBrillo && Config.osd.enableBrightness
 
-            sourceComponent: CustomMouseArea {
-                function onWheel(event: WheelEvent) {
-                    const monitor = root.monitor;
-                    if (!monitor)
-                        return;
-                    if (event.angleDelta.y > 0)
-                        monitor.setBrightness(monitor.brightness + GlobalConfig.services.brightnessIncrement);
-                    else if (event.angleDelta.y < 0)
-                        monitor.setBrightness(monitor.brightness - GlobalConfig.services.brightnessIncrement);
-                }
-
-                implicitWidth: Tokens.sizes.osd.sliderWidth
-                implicitHeight: Tokens.sizes.osd.sliderHeight
-
-                FilledSlider {
-                    anchors.fill: parent
-
-                    icon: `brightness_${(Math.round(value * 6) + 1)}`
-                    value: root.brightness
-                    onMoved: root.monitor?.setBrightness(value)
-                }
+            BarraBrillo {
+                anchors.centerIn: parent
+                scale: root.escala
+                despierto: root.screenState.osd
+                value: root.brightness
+                onMovida: v => root.monitor?.setBrightness(v)
             }
         }
     }
 
-    component WrappedLoader: Loader {
-        required property bool shouldBeActive
+    component Ranura: Item {
+        property bool activo
 
-        asynchronous: true
-        Layout.preferredHeight: shouldBeActive ? Tokens.sizes.osd.sliderHeight : 0
-        opacity: shouldBeActive ? 1 : 0
-        active: opacity > 0
-        visible: active
+        Layout.preferredWidth: 72 * root.escala + root.margen * 2
+        Layout.preferredHeight: activo ? 320 * root.escala + root.margen : 0
+        opacity: activo ? 1 : 0
+        visible: opacity > 0
 
         Behavior on Layout.preferredHeight {
             Anim {

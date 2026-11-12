@@ -97,7 +97,9 @@ Item {
         text: "ZANGETSU"
         font { family: cara.fTitulo; pixelSize: 22; letterSpacing: 13 }
         leftPadding: 13   // compensa el espaciado de la última letra
-        color: cara.col.rojo2
+        // 11-12: con el cerezo (fondo rosa) el rojo no se leía → blanco con contorno oscuro
+        color: cara.col.fg
+        style: Text.Outline; styleColor: "#b0000000"
     }
     Text {
         id: hora

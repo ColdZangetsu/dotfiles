@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+# Barra de luces del OSD (11-12): una perilla día↔noche para luz1 (foco) y luz2 (tira del monitor). El clóset (luz3) no entra.
+#   luces-ambiente set 0..1   1 = día (el azul de siempre) · 0 = noche (blanco cálido tenue). Pasa POR ENCIMA del candado
+#                             (mover la barra es una acción tuya a propósito; el candado frena lo automático).
+#   luces-ambiente get        imprime el valor guardado
+#   luces-ambiente mostrar    avisa al OSD de Caelestia que muestre la barra (atajo Super+L)
+import importlib.machinery, importlib.util, json, sys, time
+from pathlib import Path
+ESTADO = Path.home() / ".local/state/luces-ambiente"
+VALOR, MOSTRAR = ESTADO / "valor", ESTADO / "mostrar"
+FIJOS = Path.home() / ".config/govee/fijos.json"
+# paradas (v, rgb) por luz: día = fijos de siempre → blanco frío suave → blanco cálido → noche cálida tenue
+NOCHE = {"luz1": (255, 176, 96), "luz2": (255, 138, 58)}
+BRILLO_NOCHE = 20
+def hex2rgb(h): h = h.lstrip("#"); return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+def mezcla(a, b, t): return tuple(round(a[i] + (b[i] - a[i]) * t) for i in range(3))
+def color(luz, v):
+    fijos = json.loads(FIJOS.read_text()) if FIJOS.exists() else {}
+    dia = hex2rgb(fijos.get(luz, "0000ff"))
+    paradas = [(0.0, NOCHE[luz]), (0.30, (255, 214, 170)), (0.60, (190, 196, 255)), (1.0, dia)]
+    for (v0, c0), (v1, c1) in zip(paradas, paradas[1:]):
+        if v <= v1: return mezcla(c0, c1, (v - v0) / (v1 - v0))
+    return dia
+def govee():
+    ld = importlib.machinery.SourceFileLoader("govee", str(Path.home() / ".local/bin/govee"))
+    m = importlib.util.module_from_spec(importlib.util.spec_from_loader("govee", ld)); ld.exec_module(m); return m
+def main():
+    a = sys.argv[1:]; cmd = a[0] if a else "get"
+    ESTADO.mkdir(parents=True, exist_ok=True)
+    if cmd == "get":
+        print(VALOR.read_text().strip() if VALOR.exists() else "1.0"); return
+    if cmd == "mostrar":
+        MOSTRAR.write_text(str(time.time())); return
+    if cmd == "set":
+        v = max(0.0, min(1.0, float(a[1]))); VALOR.write_text(f"{v:.4f}")
+        g = govee(); luces = g.load()
+        brillo = round(BRILLO_NOCHE + (100 - BRILLO_NOCHE) * v)
+        for luz in ("luz1", "luz2"):
+            if luz not in luces: continue
+            r, gg, b = color(luz, v); ip = luces[luz]["ip"]
+            g.send(ip, "turn", {"value": 1})
+            g.send(ip, "colorwc", {"color": {"r": r, "g": gg, "b": b}, "colorTemInKelvin": 0})
+            g.send(ip, "brightness", {"value": max(1, min(100, brillo))})
+        return
+    sys.exit("uso: luces-ambiente [get|set 0..1|mostrar]")
+main()

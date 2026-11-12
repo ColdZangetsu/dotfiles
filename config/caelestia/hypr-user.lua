@@ -67,7 +67,10 @@ hl.bind("SUPER + mouse_up", ws_monitor(-1))
 
 -- Claude Code en su propio workspace especial (con su icono en la barra)
 local fn = require("utils.functions")
-hl.window_rule({ match = { class = "^claude$" }, workspace = "special:claude" })
+-- 11-11: el workspace de Claude ahora es VS Code (Claude corre en su terminal)
+hl.window_rule({ match = { class = "^code-oss$" }, workspace = "special:claude" })
+-- 11-11: VS Code más transparente que el resto (0.95) para que se vea el fondo
+hl.window_rule({ match = { class = "^code-oss$", fullscreen = false }, opacity = "0.85 override 0.80 override" })
 
 -- Super + A: mostrar/ocultar el workspace de Claude (lo abre si no está corriendo)
 -- (antes Super+C; desde 2026-10-21 Super+C = hablarle a Nero por voz)
@@ -75,7 +78,8 @@ hl.bind("SUPER + A", fn.toggle("claude"))
 
 -- Super + C: Nero por voz (graba, pregunta a la sesión fija del bot de WhatsApp y contesta
 -- en voz alta); otra vez mientras escucha/piensa = cancelar. ~/.local/bin/nero-voz
-hl.bind("SUPER + C", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/nero-voz"))
+-- 11-11: Super+C vuelve a ser Claude (VS Code); "oye Nero"/voz de la PC desactivados, la voz vive en Zangetsu
+hl.bind("SUPER + C", fn.toggle("claude"))
 
 -- Super + Alt + C: PRUEBA Gemini Live (10-23), "llamada" en tiempo real con Nero; otra vez = colgar
 hl.bind("SUPER + ALT + C", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/nero-live"))
@@ -145,7 +149,15 @@ hl.on("hyprland.start", function()
     hl.exec_cmd(os.getenv("HOME") .. "/.local/bin/arranque-remoto-sesion")
 end)
 
+-- 11-12: VS Code arranca con la sesión; al abrir ~/Nero su tarea "Nero remoto" levanta Claude Remote Control (.vscode/tasks.json)
+hl.on("hyprland.start", function()
+    hl.exec_cmd("sh -c 'sleep 12; exec code " .. os.getenv("HOME") .. "/Nero'")
+end)
+
 -- Reloj del XENEON (hora + ZANGETSU + notificaciones), debajo de las ventanas: ~/.config/quickshell/reloj
 hl.on("hyprland.start", function()
     hl.exec_cmd("qs -c reloj -n -d")
 end)
+
+-- 11-12: Super + L = barra de luces del OSD (día ↔ noche de las Govee del cuarto); ver ~/.local/bin/luces-ambiente
+hl.bind("SUPER + L", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/luces-ambiente mostrar"))

@@ -147,7 +147,17 @@ create_bind(vars.kbPinWindow, hl.dsp.window.pin())
 create_bind(vars.kbWindowFullscreen, hl.dsp.window.fullscreen({ mode = "fullscreen" }))
 create_bind(vars.kbWindowBorderedFullscreen, hl.dsp.window.fullscreen({ mode = "maximized" }))
 create_bind(vars.kbToggleWindowFloating, hl.dsp.window.float())
-create_bind(vars.kbCloseWindow, hl.dsp.window.close())
+-- 11-12: Super+Q en VS Code (class code-oss) NO lo cierra: solo esconde su workspace especial "claude"
+-- (así la sesión remota de Claude sigue viva). Super+Shift+Q (hypr-user.lua → forzar-cierre) = cierre forzado.
+create_bind(vars.kbCloseWindow, function()
+    local a = hl.get_active_window()
+    local c = a and (a.class or a.initial_class or "") or ""
+    if c == "code-oss" then
+        fn.toggle("claude")()
+    else
+        hl.dispatch(hl.dsp.window.close())
+    end
+end)
 
 -- Special workspace toggles
 create_bind(vars.kbSpecialWs, fn.toggle("specialws"))
