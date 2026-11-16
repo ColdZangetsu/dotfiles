@@ -1,0 +1,12 @@
+[Unit]
+Description=Wake-on-LAN en enp4s0 (cable directo a Zangetsu)
+After=sys-subsystem-net-devices-enp4s0.device
+BindsTo=sys-subsystem-net-devices-enp4s0.device
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/ethtool -s enp4s0 wol g
+ExecStart=/bin/sh -c 'echo enabled > /sys/class/net/enp4s0/device/power/wakeup'
+
+[Install]
+WantedBy=sys-subsystem-net-devices-enp4s0.device

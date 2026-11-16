@@ -1,0 +1,42 @@
+#!/bin/bash
+# Reinicio remoto (desde el trabajo). Se instala en /usr/local/bin/reinicio-remoto (dueño root).
+# ovi lo puede correr con sudo sin contraseña SOLO a este archivo (/etc/sudoers.d/reinicio-remoto).
+#   reinicio-remoto windows   el próximo arranque (solo uno) entra directo a Windows, en modo trabajo
+#                             (iPad); al reiniciar desde Windows vuelve a Linux como siempre
+#   reinicio-remoto linux     reinicia Linux y entra solo, en modo trabajo y con la pantalla bloqueada
+#   ... windows normal        igual pero sin bandera: Windows arranca normal (modo casa)
+#   ... linux normal          reinicio normal: el greeter de siempre, sin modo trabajo
+#   reinicio-remoto apagar    apaga la PC (Zangetsu la vuelve a prender por Wake-on-LAN: prender-pc)
+# Banderas: /var/lib/reinicio-remoto/linux (Linux→Linux)
+#           /mnt/Compartido/Nero/reinicio-remoto/{linux,windows} (entre sistemas; Compartido = D: en Windows)
+set -e
+COMPARTIDO=/mnt/Compartido/Nero/reinicio-remoto
+case "$1" in
+    windows)
+        # La entrada que apunta al bootmgfw.efi real (Boot0000 "Windows Boot Manager" es el disfraz que abre Limine)
+        n=$(efibootmgr -v | awk 'tolower($0) ~ /microsoft\\boot\\bootmgfw\.efi/ {print substr($1,5,4); exit}')
+        [ -n "$n" ] || { echo "No encontré la entrada de Windows (bootmgfw.efi)"; exit 1; }
+        efibootmgr --bootnext "$n" >/dev/null
+        if [ "$2" = normal ]; then
+            rm -f "$COMPARTIDO/windows"
+            echo "Próximo arranque: Windows normal (Boot$n). Reiniciando..."
+        else
+            { mkdir -p "$COMPARTIDO" && touch "$COMPARTIDO/windows"; } || true   # para que Windows sepa que fue remoto
+            echo "Próximo arranque: Windows en modo trabajo (Boot$n). Reiniciando..."
+        fi
+        systemctl reboot ;;
+    linux)
+        if [ "$2" = normal ]; then
+            rm -f /var/lib/reinicio-remoto/linux "$COMPARTIDO/linux"
+            echo "Reiniciando Linux normal (greeter)..."
+        else
+            mkdir -p /var/lib/reinicio-remoto && touch /var/lib/reinicio-remoto/linux
+            echo "Reiniciando Linux (entrará solo, en modo trabajo y bloqueado)..."
+        fi
+        systemctl reboot ;;
+    apagar)
+        echo "Apagando la PC..."
+        systemctl poweroff ;;
+    *)
+        echo "uso: reinicio-remoto windows|linux [normal] | apagar"; exit 1 ;;
+esac
