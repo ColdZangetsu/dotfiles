@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Aviso de llegada a casa (versión Linux de C:\Users\Ovi\Nero\avisos\aviso-llegada.ps1).
+# El usuario lo pidió el 2026-10-22: al quitar el modo trabajo (modo-trabajo off / modo-casa)
+# entre las 2:00 y las 8:59, el bot de WhatsApp le manda a su mamá "Ya llegué a casa mamá".
+# Una vez por noche; la marca está en el disco compartido, así Windows y Linux no repiten.
+# Requiere en el bot el endpoint POST /enviar-a y "contactos": {"mama": ...} en config.json.
+#   aviso-llegada.sh           aviso normal
+#   aviso-llegada.sh --prueba  manda "(prueba de Nero) ..." sin horario ni marca
+dir=/mnt/Compartido/Nero/avisos
+mkdir -p "$dir"
+log="$dir/avisos.log"
+logea() { echo "$(date +%Y-%m-%dT%H:%M:%S) [linux] $*" >> "$log"; }
+
+texto='Ya llegué a casa mamá'
+marca="$dir/llegada-$(date +%Y-%m-%d)"
+if [[ "$1" == "--prueba" ]]; then
+    texto="(prueba de Nero) $texto"
+else
+    hora=$((10#$(date +%H)))
+    if (( hora < 2 || hora >= 9 )); then logea "modo casa a las $(date +%H:%M): fuera de 2-9 am, sin aviso"; exit 0; fi
+    if [[ -e "$marca" ]]; then logea 'ya se avisó esta noche'; exit 0; fi
+fi
+
+for i in $(seq 1 12); do
+    if curl -sf -m 30 -X POST http://ZANGETSU_IP:47123/enviar-a \
+         -H 'Content-Type: application/json; charset=utf-8' \
+         --data "{\"para\":\"mama\",\"texto\":\"$texto\"}" >/dev/null; then
+        [[ "$1" == "--prueba" ]] || date +%Y-%m-%dT%H:%M:%S > "$marca"
+        logea "avisado a mamá${1:+ (prueba)}"
+        exit 0
+    fi
+    logea "intento $i falló"
+    sleep 15
+done
+logea 'NO se pudo avisar (bot sin conexión ~3 min)'

@@ -117,6 +117,9 @@
   "dashboard": {
     "enabled": false
   },
+  "services": {
+    "weatherLocation": "Los Mochis"
+  },
   "border": {
     "thickness": 6,
     "rounding": 20

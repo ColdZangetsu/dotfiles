@@ -5,14 +5,12 @@
         "enable": true,
         "match": [
           {
-            "class": "claude"
+            "class": "code-oss"
           }
         ],
         "command": [
-          "uwsm",
-          "app",
-          "--",
-          "claude.desktop"
+          "code",
+          "/home/ovi/Nero"
         ],
         "move": true
       }

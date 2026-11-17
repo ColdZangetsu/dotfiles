@@ -1,0 +1,3 @@
+{ "activa": true, "saya": true, "lenguasNero": true, "movimiento": true,
+  "gemasArriba": ["trabajo", "musica", "cine", "juego"],
+  "gemasAbajo": ["zangetsu", "stream", "apagado", "respaldo", "temp"] }

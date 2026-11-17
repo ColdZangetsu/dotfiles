@@ -164,3 +164,8 @@ hl.bind("SUPER + L", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/luces-amb
 
 -- 11-12: Super + F4 = controles táctiles del XENEON (touch + las 3 barras por unos segundos); ver ~/.local/bin/xeneon-control
 hl.bind("SUPER + F4", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/xeneon-control"))
+
+-- 11-15 Tsuka + Saya (barras de Fable). La especificación pedía Super+N y Super+Ñ, pero Super+N ya abre el panel
+-- lateral de Caelestia (kbShowSidebar) y el teclado es US altgr-intl (no hay tecla Ñ): quedan Super+Shift+N y Super+Alt+N.
+hl.bind("SUPER + SHIFT + N", hl.dsp.exec_cmd("qs -c caelestia ipc call saya nero"))      -- los tres últimos mensajes de Nero
+hl.bind("SUPER + ALT + N", hl.dsp.exec_cmd("qs -c caelestia ipc call tsuka empunar guarda"))  -- fecha, red, bandeja y sesión

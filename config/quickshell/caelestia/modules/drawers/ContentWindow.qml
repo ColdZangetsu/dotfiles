@@ -12,6 +12,7 @@ import qs.components
 import qs.components.containers
 import qs.services
 import qs.modules.bar
+import qs.modules.saya as SayaMod
 
 StyledWindow {
     id: root
@@ -100,6 +101,15 @@ StyledWindow {
             width: panels.osdWrapper.width * (1 - panels.osd.offsetScale) + root.borderThickness
             height: panels.osd.height
         }
+
+        // 11-15 Saya: en pantalla completa solo vuelve el OSD (su sección de la vaina)
+        Region {
+            readonly property var r: saya.zonaBloque
+            x: root.width - r[2] - r[0]
+            y: r[1]
+            width: r[2]
+            height: r[3]
+        }
     }
 
     Regions {
@@ -108,6 +118,7 @@ StyledWindow {
         bar: bar
         panels: panels
         win: root
+        saya: saya
     }
 
     HyprlandFocusGrab {
@@ -116,7 +127,7 @@ StyledWindow {
         active: {
             const s = root.screenState;
             const conf = root.contentItem.Config;
-            if ((s.launcher && conf.launcher.enabled) || (s.session && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled))
+            if ((s.launcher && conf.launcher.enabled) || (s.session && !s.sesionEspejo && conf.session.enabled) || (s.sidebar && conf.sidebar.enabled))
                 return true;
             if (!conf.dashboard.showOnHover && s.dashboard && conf.dashboard.enabled)
                 return true;
@@ -170,7 +181,8 @@ StyledWindow {
             group: blobGroup
             radius: root.borderRounding
             borderLeft: bar.implicitWidth - anchors.margins - root.sdfBorderOffset
-            borderRight: root.borderThickness - anchors.margins - root.sdfBorderOffset
+            // 11-15 Saya: la vaina ocupa el tramo derecho (8 px)
+            borderRight: (saya.activa ? 8 * (1 - root.fsTransitionProg) : root.borderThickness) - anchors.margins - root.sdfBorderOffset
             borderTop: root.borderThickness - anchors.margins - root.sdfBorderOffset
             borderBottom: root.borderThickness - anchors.margins - root.sdfBorderOffset
         }
@@ -313,6 +325,19 @@ StyledWindow {
             screenState: root.screenState
             popouts: panels.popouts
 
+            fullscreen: root.hasFullscreen
+        }
+
+        // 11-15 Saya, la vaina (barra derecha). Interruptor: tsuka.json "saya"
+        SayaMod.Saya {
+            id: saya
+
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.right: parent.right
+
+            screen: root.screen
+            screenState: root.screenState
             fullscreen: root.hasFullscreen
         }
     }

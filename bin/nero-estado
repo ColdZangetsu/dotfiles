@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""Estado de Nero para el par Tsuka (ojo, barra izquierda) y Saya (boca, barra derecha).
+
+  nero-estado duerme                      bot apagado o sin enlace con Zangetsu
+  nero-estado vigila                      todo en orden
+  nero-estado escucha                     la voz del cuarto la está oyendo
+  nero-estado trabaja "respaldando Zangetsu" [avance]   avance 0-100 opcional
+  nero-estado avance 73                   solo cambia el avance del encargo en curso
+  nero-estado escribio "Ya quedó el respaldo."          + lo agrega a mensajes.jsonl
+  nero-estado leido                       marca todo leído; si estaba en escribio, pasa a vigila
+  nero-estado                             imprime el estado actual (y cuántos sin leer)
+
+Escribe ~/.local/state/nero/estado (JSON {estado, texto, hora, avance?}) y
+~/.local/state/nero/mensajes.jsonl (una línea {hora, texto, leido} por mensaje; últimos 20),
+siempre de forma atómica (temporal + rename): las barras los observan con FileView watchChanges, sin sondeo.
+"escribio" ya NO caduca: el mensaje sin leer se queda hasta que se lea (barra o WhatsApp -> `nero-estado leido`).
+"trabaja" caduca a las 3 h (lo hace la barra).
+Desde Zangetsu: ssh pc nero-pc 'nero-estado escribio "Ya quedó."'
+"""
+import fcntl
+import json
+import os
+import sys
+import tempfile
+import time
+
+DIR = os.path.expanduser("~/.local/state/nero")
+RUTA = os.path.join(DIR, "estado")
+MENSAJES = os.path.join(DIR, "mensajes.jsonl")
+CANDADO = os.path.join(DIR, ".candado")
+ESTADOS = ("duerme", "vigila", "escucha", "trabaja", "escribio")
+MAX_MENSAJES = 20
+
+
+def escribir(ruta: str, texto: str) -> None:
+    os.makedirs(DIR, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=DIR)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(texto)
+        os.replace(tmp, ruta)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def leer_estado() -> dict:
+    try:
+        with open(RUTA, encoding="utf-8") as f:
+            d = json.load(f)
+            return d if isinstance(d, dict) else {}
+    except (FileNotFoundError, ValueError):
+        return {}
+
+
+def leer_mensajes() -> list:
+    lista = []
+    try:
+        with open(MENSAJES, encoding="utf-8") as f:
+            for linea in f:
+                linea = linea.strip()
+                if not linea:
+                    continue
+                try:
+                    m = json.loads(linea)
+                except ValueError:
+                    continue
+                if isinstance(m, dict) and isinstance(m.get("texto"), str):
+                    lista.append(m)
+    except FileNotFoundError:
+        pass
+    return lista
+
+
+def guardar_mensajes(lista: list) -> None:
+    lista = lista[-MAX_MENSAJES:]
+    escribir(MENSAJES, "".join(json.dumps(m, ensure_ascii=False) + "\n" for m in lista))
+
+
+def guardar_estado(estado: str, texto: str, avance=None) -> None:
+    d = {"estado": estado, "texto": texto[:240], "hora": int(time.time())}
+    if avance is not None:
+        d["avance"] = avance
+    escribir(RUTA, json.dumps(d, ensure_ascii=False) + "\n")
+
+
+def num_avance(s: str):
+    try:
+        v = float(s.strip().rstrip("%"))
+    except ValueError:
+        return None
+    if 0 <= v <= 100:
+        return int(round(v))
+    return None
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    if not args:
+        d = leer_estado() or {"estado": "vigila", "texto": "", "hora": 0}
+        sin_leer = sum(1 for m in leer_mensajes() if not m.get("leido"))
+        print(json.dumps(d, ensure_ascii=False) + f"  · sin leer: {sin_leer}")
+        return 0
+    if args[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0
+    orden = args[0].strip().lower().replace("ó", "o").replace("í", "i")
+    resto = args[1:]
+
+    os.makedirs(DIR, exist_ok=True)
+    with open(CANDADO, "w") as candado:
+        fcntl.flock(candado, fcntl.LOCK_EX)
+
+        if orden == "leido":
+            lista = leer_mensajes()
+            if any(not m.get("leido") for m in lista):
+                for m in lista:
+                    m["leido"] = True
+                guardar_mensajes(lista)
+            if leer_estado().get("estado") == "escribio":
+                guardar_estado("vigila", "")
+            return 0
+
+        if orden == "avance":
+            v = num_avance(resto[0]) if resto else None
+            if v is None:
+                print("uso: nero-estado avance 0..100", file=sys.stderr)
+                return 2
+            d = leer_estado()
+            guardar_estado("trabaja", d.get("texto", "") if d.get("estado") == "trabaja" else "", v)
+            return 0
+
+        if orden not in ESTADOS:
+            print(__doc__.strip(), file=sys.stderr)
+            return 2
+
+        avance = None
+        if orden == "trabaja" and len(resto) >= 2:
+            v = num_avance(resto[-1])
+            if v is not None:
+                avance = v
+                resto = resto[:-1]
+        texto = " ".join(resto).strip()
+
+        if orden == "escribio":
+            if not texto:
+                print('uso: nero-estado escribio "mensaje"', file=sys.stderr)
+                return 2
+            lista = leer_mensajes()
+            lista.append({"hora": int(time.time()), "texto": texto[:600], "leido": False})
+            guardar_mensajes(lista)
+
+        guardar_estado(orden, texto, avance)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

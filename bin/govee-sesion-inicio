@@ -1,0 +1,10 @@
+#!/bin/bash
+# govee-sesion.service (2026-11-12): al iniciar sesión prende las luces y toma el color del fondo,
+# PERO si la PC arrancó a distancia (WoL/iPad/reinicio-remoto → entra directo a modo trabajo)
+# las deja APAGADAS. /run/reinicio-remoto lo crea greetd-arranque y dura hasta el siguiente arranque.
+G="$HOME/.local/bin/govee"
+"$G" esperar 90
+if [ -d /run/reinicio-remoto ] || [ -e "$XDG_RUNTIME_DIR/modo-trabajo" ]; then
+    exec "$G" off --forzar
+fi
+"$G" on && exec "$G" fondo

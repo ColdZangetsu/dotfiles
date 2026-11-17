@@ -1,0 +1,8 @@
+#!/bin/bash
+# Vigía al momento de la gema stream de Tsuka (11-17): escucha los cambios de PipeWire (pw-dump -m; en reposo no llega nada)
+# y, cuando paran 1 s, corre `nero-vigias stream` (~80 ms). Las grabadoras sin portal las sigue viendo el timer de 30 s.
+# Lo lanza nero-vigia-stream.service. Quitar: systemctl --user disable --now nero-vigia-stream
+pw-dump -m 2>/dev/null | while IFS= read -r _; do
+    while IFS= read -r -t 1 _; do :; done   # junta la ráfaga de eventos
+    "$HOME/.local/bin/nero-vigias" stream >/dev/null 2>&1
+done

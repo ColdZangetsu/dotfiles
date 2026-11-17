@@ -9,6 +9,66 @@ import qs.services
 Singleton {
     property ShellRoot shellRoot
 
+    // 11-13: confirmación del menú de sesión compartida por las 3 pantallas.
+    // accionSesion = icono del botón confirmado; todas las pantallas abren el menú y hacen el eclipse a la vez.
+    property string accionSesion: ""
+    property real accionSesionT: 0
+    // 11-14: la orden se manda UNA vez, la primera pantalla que termina el eclipse (antes dependía de
+    // `origen` por botón, que se perdía al re-crearse el menú → animación completa y no reiniciaba).
+    property bool accionHecha: false
+    // 11-16: eclipses corriendo ahora (una por pantalla); se apaga/reinicia cuando llega a 0 (las que abrieron tarde también terminan)
+    property int eclipsesVivos: 0
+
+    property real sesionAbiertaT: 0
+
+    // 11-14: el menú se abre/cierra en LAS 3 pantallas a la vez desde que se abre en una (antes las otras
+    // entraban hasta completar el anillo → llegaban tarde). Las espejo no toman el focus grab (Hyprland
+    // solo deja uno; si no, se cerrarían entre ellas).
+    function espejarSesion(s: ScreenState): void {
+        if (s.sesionEspejo) {
+            if (!s.session)
+                s.sesionEspejo = false;
+            return;
+        }
+        if (s.session) {
+            sesionAbiertaT = Date.now();
+            for (const o of states.instances)
+                if (o !== s && !o.session) {
+                    o.sesionEspejo = true;
+                    o.session = true;
+                }
+        } else {
+            for (const o of states.instances)
+                if (o !== s && o.sesionEspejo)
+                    o.session = false;
+        }
+    }
+
+    function confirmarSesion(icono: string): void {
+        for (const s of states.instances)
+            if (!s.session) {
+                s.sesionEspejo = true;
+                s.session = true;
+            }
+        accionSesionT = Date.now();
+        accionHecha = false;
+        eclipsesVivos = 0;
+        accionSesion = icono;
+    }
+
+    // limpia el menú 2.5 s después de mandar la orden (vive aquí y no en el botón, que puede re-crearse)
+    Timer { id: limpiarSesion; interval: 2500; onTriggered: terminarSesion() }
+    function marcarHecha(): void {
+        accionHecha = true;
+        limpiarSesion.restart();
+    }
+
+    function terminarSesion(): void {
+        accionSesion = "";
+        for (const s of states.instances)
+            s.session = false;
+    }
+
     function anySidebarOpen(): bool {
         return states.instances.some(s => s.sidebar);
     }
@@ -48,7 +108,10 @@ Singleton {
 
         model: Screens.screens
 
-        ScreenState {}
+        ScreenState {
+            id: estado
+            onSessionChanged: ShellState.espejarSesion(estado)
+        }
     }
 
     Variants {

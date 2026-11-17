@@ -1,0 +1,10 @@
+[Unit]
+Description=Gemas de Tsuka: nero-vigias cada 30 s
+
+[Timer]
+OnStartupSec=5s
+OnUnitActiveSec=30s
+AccuracySec=2s
+
+[Install]
+WantedBy=timers.target

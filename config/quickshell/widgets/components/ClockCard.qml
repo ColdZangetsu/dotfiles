@@ -8,7 +8,7 @@ import qs.services
 Card {
     id: root
 
-    property string place: "Casa"
+    property string place: "Los Mochis"
     // [nombre, zona horaria]
     property var cities: [["Monterrey", "America/Monterrey"], ["Nueva York", "America/New_York"], ["Tokyo", "Asia/Tokyo"], ["Colombia", "America/Bogota"]]
     property var cityTimes: []

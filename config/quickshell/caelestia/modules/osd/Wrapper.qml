@@ -15,7 +15,8 @@ Item {
 
     property bool hovered
     readonly property Brightness.Monitor monitor: Brightness.getMonitorForScreen(root.screen)
-    readonly property bool shouldBeActive: screenState.osd && Config.osd.enabled && !(screenState.utilities && Config.utilities.enabled)
+    // 11-15: con Saya (tsuka.json "saya": true) estas barras salen de la vaina; este contenedor se retira
+    readonly property bool shouldBeActive: !TsukaConf.saya && screenState.osd && Config.osd.enabled && !(screenState.utilities && Config.utilities.enabled)
     property real offsetScale: shouldBeActive ? 0 : 1
     property real sidebarOffset: sidebarOrSessionVisible ? 12 : 0
 

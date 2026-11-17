@@ -241,4 +241,5 @@ create_bind("SUPER + Home", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/mo
 create_bind("SUPER + F1", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/audio-cambiar"))
 -- Modo música: luces Govee al ritmo de lo que suena en la PC
 create_bind("SUPER + F2", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/modo-musica"))
-create_bind("SUPER + F3", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/govee-juego-tecla"))
+-- 11-17 Ovi: luces de modo juego QUITADAS ("me molestó más que gustar"). Volver: descomentar y systemctl --user enable --now govee-juego-vigilante
+-- create_bind("SUPER + F3", hl.dsp.exec_cmd(os.getenv("HOME") .. "/.local/bin/govee-juego-tecla"))

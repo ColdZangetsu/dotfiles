@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Gemas de estado de Tsuka (2026-11-15): un archivo por gema en ~/.local/state/nero/gemas/<nombre>
+#   línea 1: 0 apagada | 1 encendida | 2 te llama (alerta)
+#   línea 2: texto corto para la placa (español, minúsculas)
+#   nero-gema <nombre> <0|1|2> [texto]   escribe (atómico: tmp + mv; no reescribe si no cambió)
+#   nero-gema <nombre>                   imprime el estado actual
+#   nero-gema                            imprime todas
+# La barra lo vigila con FileView watchChanges (inotify): por eso SIEMPRE tmp en el mismo dir + mv.
+# Nombres: casa musica cine juego zangetsu stream apagado respaldo temp
+# (11-16: «casa» reemplaza a «trabajo»: encendida en modo casa; en modo trabajo no hay barras y nunca se veía)
+# Lo llaman los scripts de cada modo (siempre con `|| true`) y nero-vigias (timer de 30 s).
+DIR="${XDG_STATE_HOME:-$HOME/.local/state}/nero/gemas"
+NOMBRES=" casa musica cine juego zangetsu stream apagado respaldo temp "
+
+if [ $# -eq 0 ]; then
+    for n in $NOMBRES; do
+        [ -e "$DIR/$n" ] && printf '%-9s %s\n' "$n" "$(paste -sd'|' "$DIR/$n")" || printf '%-9s -\n' "$n"
+    done
+    exit 0
+fi
+
+n=$1
+[[ $NOMBRES == *" $n "* ]] || { echo "nero-gema: gema desconocida '$n' (válidas:$NOMBRES)" >&2; exit 2; }
+
+if [ $# -eq 1 ]; then
+    cat "$DIR/$n" 2>/dev/null || { echo "nero-gema: $n sin escribir" >&2; exit 1; }
+    exit 0
+fi
+
+nivel=$2
+[[ $nivel == [012] ]] || { echo "nero-gema: nivel '$nivel' inválido (0, 1 o 2)" >&2; exit 2; }
+texto=${3:-}
+texto=${texto//$'\n'/ }   # una sola línea
+
+nuevo=$(printf '%s\n%s' "$nivel" "$texto")
+# Sin cambios = no tocar el archivo (no despertar a la barra de balde)
+[ -e "$DIR/$n" ] && [ "$(cat "$DIR/$n" 2>/dev/null)" = "$nuevo" ] && exit 0
+
+mkdir -p "$DIR" || exit 1
+tmp=$(mktemp "$DIR/.$n.XXXXXX") || exit 1
+if printf '%s\n' "$nuevo" > "$tmp" && chmod 644 "$tmp" && mv -f "$tmp" "$DIR/$n"; then
+    exit 0
+fi
+rm -f "$tmp"; exit 1

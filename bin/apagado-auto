@@ -21,6 +21,8 @@ BOT=http://ZANGETSU_IP:47123/enviar
 mkdir -p "$ESTADO"
 
 # PRUEBA=1 (con INACTIVO_S/TRANQUILA_S/AVISO_S cortos): no manda WhatsApp, no apaga y no cuenta a Claude
+# Gema "apagado" de Tsuka (nunca en PRUEBA; si nero-gema falla no pasa nada)
+gema() { [ -z "$PRUEBA" ] && [ -x "$HOME/.local/bin/nero-gema" ] && "$HOME/.local/bin/nero-gema" "$@" >/dev/null 2>&1; return 0; }
 whatsapp() { [ -n "$PRUEBA" ] && { echo "$(date +%T) WhatsApp: $1"; return; }; curl -sf -m 30 -X POST "$BOT" --data-binary "$1" >/dev/null; }
 
 # Bytes recibidos (todas las interfaces menos lo/tailscale) y CPU ocupada desde la última llamada
@@ -53,7 +55,7 @@ ocupada() {
 
 case "$1" in
     cancelar)
-        touch "$CANCELADO"; echo "Listo: no se apaga sola hasta que la vuelvas a usar."; exit 0 ;;
+        touch "$CANCELADO"; gema apagado 0 "cancelado hasta que la uses"; echo "Listo: no se apaga sola hasta que la vuelvas a usar."; exit 0 ;;
     estado)
         red_y_cpu; sleep 5; red_y_cpu
         echo "sin teclado/mouse 1 h: $([ -e "$INACTIVA" ] && echo sí || echo no)"
@@ -64,10 +66,11 @@ case "$1" in
 esac
 
 rm -f "$INACTIVA" "$CANCELADO"
+gema apagado 1 "armado · 1 h sin uso"
 "$HOME"/.local/bin/sin-entrada $INACTIVO_S | while read -r l; do
-    case $l in inactiva) touch "$INACTIVA" ;; activa) rm -f "$INACTIVA" "$CANCELADO" ;; esac
+    case $l in inactiva) touch "$INACTIVA" ;; activa) rm -f "$INACTIVA" "$CANCELADO"; gema apagado 1 "armado · 1 h sin uso" ;; esac
 done &
-trap 'pkill -P $$ 2>/dev/null; pkill -x sin-entrada -U "$UID" 2>/dev/null' EXIT
+trap 'pkill -P $$ 2>/dev/null; pkill -x sin-entrada -U "$UID" 2>/dev/null; gema apagado 0 "sin armar"' EXIT
 
 ultimo_ocupada=$(date +%s)
 red_y_cpu
@@ -79,6 +82,7 @@ while sleep ${PASO_S:-60}; do
 
     whatsapp "💤 La PC lleva 1 h sin usarse, la apago en 10 min. Si no quieres, dime \"no la apagues\"." || continue
     fin=$(( ahora + AVISO_S )); motivo=
+    gema apagado 2 "se apaga en $(( AVISO_S / 60 )) min"
     while (( $(date +%s) < fin )); do
         sleep 30
         red_y_cpu
@@ -89,10 +93,12 @@ while sleep ${PASO_S:-60}; do
     case "$motivo" in
         '')        whatsapp "Apagando la PC 😴 (para prenderla: \"prende la PC\")"
                    [ -n "$PRUEBA" ] && exit 0
+                   touch "$XDG_RUNTIME_DIR/govee-no-tocar"   # 11-13: apagado por inactividad = probablemente dormido/fuera: no prender las luces al apagar
                    sudo -n /usr/local/bin/reinicio-remoto apagar; exit 0 ;;
         cancelado) ;;   # Nero ya le contestó
         usada)     whatsapp "Ya no la apago, la volviste a usar 👍" ;;
         *)         whatsapp "Ya no la apago: se puso a hacer algo ($motivo)." ;;
     esac
+    [ "$motivo" = cancelado ] && gema apagado 0 "cancelado hasta que la uses" || gema apagado 1 "armado · 1 h sin uso"
     ultimo_ocupada=$(date +%s)
 done

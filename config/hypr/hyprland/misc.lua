@@ -20,6 +20,11 @@ hl.config({
         background_color             = "rgb(" .. scheme.surfaceContainer .. ")",
     },
 
+    -- 11-15: sin HDR automático en pantalla completa (YouTube en Brave lo pedía: parpadeo negro + colores lavados en el ASUS)
+    render = {
+        cm_auto_hdr = 0
+    },
+
     debug = {
         error_position = 1
     }

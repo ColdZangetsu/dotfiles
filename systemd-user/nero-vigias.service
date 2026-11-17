@@ -1,0 +1,8 @@
+[Unit]
+Description=Gemas de Tsuka: Zangetsu, temperatura, stream, cine, respaldo y modos (una pasada)
+
+[Service]
+Type=oneshot
+Nice=15
+IOSchedulingClass=idle
+ExecStart=%h/.local/bin/nero-vigias

@@ -5,6 +5,7 @@ import Quickshell
 import Caelestia.Config
 import qs.components.containers
 import qs.modules.bar as Bar
+import qs.services
 
 Scope {
     id: root
@@ -21,8 +22,10 @@ Scope {
         anchors.top: true
     }
 
+    // 11-15 Saya: zona reservada derecha de 8 px (la vaina) en vez de los 6 del marco
     ExclusionZone {
         anchors.right: true
+        exclusiveZone: TsukaConf.saya ? 8 : contentItem.Config.border.thickness
     }
 
     ExclusionZone {

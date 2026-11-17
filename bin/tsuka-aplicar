@@ -1,0 +1,71 @@
+#!/bin/bash
+# tsuka-aplicar: aplica Tsuka + Saya (barras finales de Fable) reiniciando Caelestia SOLO cuando la sesión
+# está desbloqueada (nunca se reinicia el shell con el bloqueo puesto, y nunca se desbloquea desde aquí)
+# y fuera de modo trabajo (sin $XDG_RUNTIME_DIR/modo-trabajo y pantallas físicas encendidas; 11-15: no reiniciar con el STREAM al iPad).
+#   TSUKA_REGRESO=<commit> commit al que regresa caelestia/ si el nuevo no carga · TSUKA_MENSAJE="…" lo que dice Nero
+#   tsuka-aplicar            espera (cada 20 s) a que la sesión esté desbloqueada, reinicia el shell y lo verifica
+#   tsuka-aplicar ahora      igual, pero sin esperar (solo si ya está desbloqueada)
+# Si el shell nuevo no carga, regresa la copia del commit anterior (REGRESO) y reinicia otra vez;
+# en cualquier caso Nero avisa con un mensaje (nero-estado escribio). Se lanza como unidad transitoria:
+#   systemd-run --user --unit tsuka-aplicar ~/.local/bin/tsuka-aplicar
+set -u
+REPO=~/.config/quickshell
+REGRESO=${TSUKA_REGRESO:-ea7f219}   # commit con la Tsuka de prueba (funcionaba)
+LOG=~/.local/state/nero/tsuka-aplicar.log
+mkdir -p ~/.local/state/nero
+log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
+
+bloqueada() { [ "$(timeout 5 qs -c caelestia ipc call lock isLocked 2>/dev/null)" != "false" ]; }
+en_trabajo() {
+    [ -e "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/modo-trabajo" ] && return 0   # (antes la gema «trabajo»; ahora la gema es «casa»)
+    hyprctl monitors -j 2>/dev/null | python3 -c "import json,sys; ms=[m for m in json.load(sys.stdin) if m['name'].startswith('DP-')]; sys.exit(0 if ms and not all(m['dpmsStatus'] for m in ms) else 1)"
+}
+ocupada() { bloqueada || en_trabajo; }
+
+reiniciar() {
+    local inhib
+    inhib=$(timeout 5 qs -c caelestia ipc call idleInhibitor isEnabled 2>/dev/null)
+    qs -c caelestia kill >/dev/null 2>&1
+    sleep 2
+    systemd-run --user --collect --unit "caelestia-$(date +%s)" qs -c caelestia -n >/dev/null 2>&1
+    sleep 12
+    [ "$inhib" = "true" ] && timeout 5 qs -c caelestia ipc call idleInhibitor enable >/dev/null 2>&1
+}
+
+sano() {
+    local e
+    e=$(timeout 5 qs -c caelestia ipc call tsuka estado 2>/dev/null) || return 1
+    [[ "$e" == activa* ]] || return 1
+    ! timeout 5 qs log -c caelestia 2>/dev/null | grep -q "Failed to load configuration"
+}
+
+DEF='Ya están puestas Tsuka y Saya. Si algo no te gusta: echo '"'"'{"activa": false}'"'"' > ~/.config/caelestia/tsuka.json'
+MSG=${TSUKA_MENSAJE:-$DEF}
+log "inicio (pid $$)"
+if [ "${1:-}" != "ahora" ]; then
+    until ! ocupada; do sleep 20; done
+    sleep 8
+    ocupada && { log "se volvió a bloquear o a modo trabajo; espero"; exec "$0"; }
+fi
+ocupada && { log "bloqueada o en modo trabajo: no reinicio"; exit 1; }
+
+log "desbloqueada y fuera de modo trabajo: reinicio el shell"
+reiniciar
+if sano; then
+    log "ok: Tsuka + Saya encendidas"
+    ~/.local/bin/nero-estado escribio "$MSG" || true
+    exit 0
+fi
+
+log "el shell nuevo NO cargó: regreso caelestia/ a $REGRESO"
+git -C "$REPO" stash push -m "tsuka-saya (no cargó $(date +%F))" -- caelestia >/dev/null 2>&1
+git -C "$REPO" checkout "$REGRESO" -- caelestia >> "$LOG" 2>&1
+reiniciar
+if sano; then
+    log "regreso ok (la Tsuka de prueba)"
+    ~/.local/bin/nero-estado escribio "Tsuka+Saya no cargaron; dejé la Tsuka de prueba. Lo nuevo quedó en git stash de ~/.config/quickshell." || true
+else
+    log "tampoco cargó el regreso: pongo la barra de antes"
+    echo '{"activa": false}' > ~/.config/caelestia/tsuka.json
+    reiniciar
+fi

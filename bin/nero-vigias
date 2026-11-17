@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+# Vigías de las gemas de Tsuka (2026-11-15). Lo corre nero-vigias.timer cada 30 s (una pasada y sale;
+# el timer es el ÚNICO sondeo, nada de bucles). Escribe con nero-gema, que no toca el archivo si no cambió.
+#   zangetsu  ping -c1 -W1 al cable (ZANGETSU_CABLE_IP; la PC es PC_CABLE_IP) y si no, a Tailscale: 1 en línea / 2 no responde
+#   temp      la mayor de CPU (coretemp) y GPU (nvidia-smi): 0 <70 °C, 1 70–84, 2 ≥85; solo se reescribe
+#             si cambió el nivel o se movió ≥5 °C desde lo último escrito
+#   stream    1 si alguien ve o graba la pantalla, 0 nadie. Texto = qué pasa, juntado con « · »:
+#             - captura del portal (xdg-desktop-portal-hyprland crea un nodo PipeWire «xdg-desktop-portal-hyprland» (versiones viejas: «xdph-streaming-N»)):
+#               se sigue el link hasta el cliente que lo consume y su proceso (y padres) dice quién:
+#               Equibop/Vesktop/Discord → «compartiendo en Discord», OBS → «grabando (OBS)»,
+#               Steam (-pipewire) o Sunshine → «iPad conectado», navegador → «compartiendo en Brave», etc.
+#             - grabadoras sin portal: proceso gpu-screen-recorder / wf-recorder / wl-screenrec
+#             - sesiones NVENC de sunshine/steam (Moonlight o Steam Link sin portal) → «iPad conectado»
+#             Hoy lo revisa el timer (≤30 s). `nero-vigias stream` (≈80 ms) sirve para un vigía al momento (pw-dump -m).
+#   cine      /estado de letra-tv en Zangetsu (solo si respondió el ping): Apple TV con video = 1
+#   respaldo  repo restic Zangetsu→PC (~/Respaldos/zangetsu): 0 al día, 1 corriendo, 2 >7 días
+#             (o un 2 que mandó Zangetsu con `ssh pc nero-pc 'nero-gema respaldo 2 "falló anoche"'`)
+#   casa, musica, juego, apagado: reconcilia el valor real (al iniciar sesión no queda un 1 viejo);
+#             el cambio inmediato lo escriben sus propios scripts con los MISMOS textos de aquí.
+#   nero-vigias -v   dice lo que ve · nero-vigias stream [-v]   solo la gema stream
+G="$HOME/.local/bin/nero-gema"
+DIR="${XDG_STATE_HOME:-$HOME/.local/state}/nero/gemas"
+RUN="${XDG_RUNTIME_DIR:-/run/user/$UID}/nero-vigias"
+ZANGETSU_CABLE=ZANGETSU_CABLE_IP
+ZANGETSU_TS=ZANGETSU_IP
+mkdir -p "$RUN" "$DIR"
+SOLO=; [ "$1" = stream ] && { SOLO=stream; shift; }
+V=; [ "$1" = -v ] && V=1
+log() { [ -n "$V" ] && echo "$*"; }
+nivel() { head -n1 "$DIR/$1" 2>/dev/null; }
+gema() { log "$1 → $2 · $3"; "$G" "$@" || true; }
+
+# quién es un proceso: su cmdline y la de hasta 4 padres (Electron captura desde un hijo sin el nombre de la app)
+quien_pid() {
+    local p=$1 i c b
+    for i in 1 2 3 4 5; do
+        [[ $p =~ ^[0-9]+$ ]] && (( p > 1 )) || break
+        c=$(tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null) || break
+        b=${c%% *}; b=${b##*/}
+        case "${c,,}" in
+            *equibop*|*vesktop*|*discord*|*legcord*|*webcord*) echo "compartiendo en Discord"; return ;;
+        esac
+        case "$b" in
+            sunshine|steam|steamwebhelper) echo "iPad conectado"; return ;;
+            obs|obs-studio) echo "grabando (OBS)"; return ;;
+            gpu-screen-recorder) echo "grabando (gpu-screen-recorder)"; return ;;
+            brave*) echo "compartiendo en Brave"; return ;;
+            chrom*) echo "compartiendo en Chrome"; return ;;
+            firefox*|zen*|librewolf*) echo "compartiendo en el navegador"; return ;;
+        esac
+        p=$(awk '/^PPid:/{print $2}' "/proc/$p/status" 2>/dev/null)
+    done
+    echo "compartiendo pantalla"
+}
+
+# gema stream; $1 = sesiones NVENC (de la llamada a nvidia-smi que ya se hizo; vacío = no se sabe)
+vigia_stream() {
+    local enc=$1 l q p que=() n
+    # 1) capturas del portal: nodo xdph → link → nodo consumidor → cliente → pid
+    while IFS=$'\t' read -r n p; do
+        [ -n "$n" ] || continue
+        if [ -n "$p" ]; then q=$(quien_pid "$p"); else q="compartiendo pantalla"; fi
+        log "stream: portal $n ← pid ${p:--} = $q"
+        que+=("$q")
+    done < <(timeout 5 pw-dump 2>/dev/null | jq -r '
+        [.[] | select(.type == "PipeWire:Interface:Node" and ((.info.props["node.name"] // "") | (startswith("xdph-streaming-") or . == "xdg-desktop-portal-hyprland")))] as $src
+        | [.[] | select(.type == "PipeWire:Interface:Link")] as $links
+        | [.[] | select(.type == "PipeWire:Interface:Node")] as $nodes
+        | [.[] | select(.type == "PipeWire:Interface:Client")] as $clients
+        | $src[] | . as $s
+        | ([$links[] | select(.info["output-node-id"] == $s.id) | .info["input-node-id"]] | unique) as $dst
+        | if ($dst | length) == 0 then [$s.info.props["node.name"], ""]
+          else $dst[] as $d
+            | ($nodes[] | select(.id == $d) | .info.props["client.id"]) as $c
+            | ($clients[] | select(.id == $c) | .info.props | (."application.process.id" // ."pipewire.sec.pid" // "")) as $pid
+            | [$s.info.props["node.name"], ($pid | tostring)]
+          end | @tsv' 2>/dev/null)
+    # 2) grabadoras que capturan sin portal (KMS / wlr-screencopy)
+    while read -r p n; do
+        case "$n" in
+            gpu-screen-reco*) [[ " $(tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null) " == *" -r "* ]] \
+                && q="repetición instantánea (gpu-screen-recorder)" || q="grabando (gpu-screen-recorder)" ;;
+            *) q="grabando ($n)" ;;
+        esac
+        log "stream: proceso $n ($p) = $q"; que+=("$q")
+    done < <(pgrep -l -x 'gpu-screen-reco|wf-recorder|wl-screenrec' 2>/dev/null)
+    # 3) Moonlight (Sunshine) o Steam Link sin portal: sesiones NVENC de esos procesos
+    if [[ $enc =~ ^[0-9]+$ ]] && (( enc > 0 )); then
+        for p in $(timeout 5 nvidia-smi encodersessions 2>/dev/null | awk '$2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ {print $3}' | sort -u); do
+            case "$(cat "/proc/$p/comm" 2>/dev/null)" in sunshine*|steam*) que+=("iPad conectado"); log "stream: NVENC pid $p = iPad" ;; esac
+        done
+    fi
+    # sin repetir, en orden de aparición
+    local t= x
+    for x in "${que[@]}"; do [[ " · $t · " == *" · $x · "* ]] || t=${t:+$t · }$x; done
+    if [ -n "$t" ]; then gema stream 1 "$t"; else gema stream 0 "nadie"; fi
+}
+
+if [ "$SOLO" = stream ]; then
+    enc=$(timeout 5 nvidia-smi --query-gpu=encoder.stats.sessionCount --format=csv,noheader,nounits 2>/dev/null | head -1)
+    vigia_stream "${enc// /}"
+    exit 0
+fi
+
+# --- zangetsu (+ cine, que vive allá) ---
+ip_z=
+if ping -c1 -W1 -q "$ZANGETSU_CABLE" >/dev/null 2>&1; then ip_z=$ZANGETSU_CABLE; gema zangetsu 1 "en línea"
+elif ping -c1 -W1 -q "$ZANGETSU_TS" >/dev/null 2>&1; then ip_z=$ZANGETSU_TS; gema zangetsu 1 "en línea · por tailscale"
+else gema zangetsu 2 "no responde"; fi
+
+if [ -n "$ip_z" ]; then
+    est=$(curl -s -m 2 "http://$ip_z:47180/estado" 2>/dev/null)
+    if [ -n "$est" ] && c=$(jq -r '[.cine, .estado, ((.ahora // 0) - (.t // 0) | floor)] | @tsv' <<<"$est" 2>/dev/null); then
+        read -r cine estado hace <<<"$c"
+        if [ "$cine" = true ] && [ "$estado" = playing ]; then gema cine 1 "viendo · apple tv"
+        elif [ "$cine" = true ] && (( hace < 10800 )); then gema cine 1 "en pausa · apple tv"
+        else gema cine 0 "nada en el apple tv"; fi
+    fi
+else
+    gema cine 0 "sin datos · zangetsu no responde"
+fi
+
+# --- temperatura y stream (una sola llamada a nvidia-smi) ---
+cpu=0
+for h in /sys/class/hwmon/hwmon*; do
+    [ "$(cat "$h/name" 2>/dev/null)" = coretemp ] || continue
+    for f in "$h"/temp*_input; do v=$(( $(cat "$f" 2>/dev/null || echo 0) / 1000 )); (( v > cpu )) && cpu=$v; done
+done
+IFS=', ' read -r gpu enc < <(timeout 5 nvidia-smi --query-gpu=temperature.gpu,encoder.stats.sessionCount --format=csv,noheader,nounits 2>/dev/null | head -1)
+gpu=${gpu%.*}; [[ $gpu =~ ^[0-9]+$ ]] || gpu=0
+if (( cpu > 0 || gpu > 0 )); then
+    if (( gpu >= cpu )); then t=$gpu; quien=GPU; else t=$cpu; quien=CPU; fi
+    if (( t >= 85 )); then n=2; p=caliente; elif (( t >= 70 )); then n=1; p=tibia; else n=0; p=fresca; fi
+    ult=$(cat "$RUN/temp" 2>/dev/null || echo -100)
+    d=$(( t - ult )); (( d < 0 )) && d=$(( -d ))
+    if [ "$(nivel temp)" != "$n" ] || (( d >= 5 )); then
+        gema temp "$n" "$p · $quien $t °C" && echo "$t" > "$RUN/temp"
+    fi
+    log "temp: CPU $cpu GPU $gpu (último escrito $ult)"
+fi
+vigia_stream "$enc"
+
+# --- modos de la PC (reconciliar) ---
+read -r a_musica a_apag < <(systemctl --user is-active govee-musica apagado-auto 2>/dev/null | paste -sd' ')
+
+if [ -e "$XDG_RUNTIME_DIR/modo-trabajo" ]; then gema casa 0 "apagado · pantalla al iPad"; else gema casa 1 "encendido · en casa"; fi
+
+if [ "$a_musica" = active ]; then gema musica 1 "encendido · luces al ritmo"; else gema musica 0 "apagado"; fi
+
+# juego: 1 solo con un juego abierto (11-17: ya no depende de las luces de juego, que Ovi quitó).
+# Misma regla que tenía govee-juego-vigilante: Steam/Proton (steam_app_*), gamescope, Minecraft, Wine (.exe).
+[ -n "$HYPRLAND_INSTANCE_SIGNATURE" ] || export HYPRLAND_INSTANCE_SIGNATURE=$(ls -t "$XDG_RUNTIME_DIR/hypr" 2>/dev/null | head -1)
+juego=$(timeout 3 hyprctl clients -j 2>/dev/null | jq -r 'first(.[] | (.class // "") as $k
+    | select(($k | startswith("steam_app_")) or $k == "gamescope" or ($k | startswith("Minecraft")) or ($k | ascii_downcase | endswith(".exe")))
+    | (if (.title // "") != "" then .title else $k end))' 2>/dev/null)
+if [ -n "$juego" ]; then gema juego 1 "jugando · ${juego:0:40}"; else gema juego 0 "sin partida"; fi
+
+if [ "$a_apag" != active ]; then gema apagado 0 "sin armar"
+elif [ -e "$XDG_RUNTIME_DIR/apagado-auto/cancelado" ]; then gema apagado 0 "cancelado hasta que la uses"
+elif [ "$(nivel apagado)" = 2 ]; then :   # fase de aviso: la quita apagado-auto
+else gema apagado 1 "armado · 1 h sin uso"; fi
+
+# --- respaldo (lo hace Zangetsu; aquí se ve el repo restic que deja en la PC) ---
+REPO="$HOME/Respaldos/zangetsu"
+if [ -d "$REPO/snapshots" ]; then
+    ult=$(find "$REPO/snapshots" -type f -printf '%T@\n' 2>/dev/null | sort -n | tail -1); ult=${ult%.*}
+    ahora=$(date +%s)
+    if [ -n "$(find "$REPO/locks" -type f -mmin -120 2>/dev/null | head -1)" ] || pgrep -f '^rsync --server --sender' >/dev/null; then
+        gema respaldo 1 "corriendo"
+    elif [ -z "$ult" ]; then
+        gema respaldo 2 "nunca se ha respaldado"
+    elif (( ahora - ult > 7 * 86400 )); then
+        gema respaldo 2 "sin respaldo hace $(( (ahora - ult) / 86400 )) días"
+    elif [ "$(nivel respaldo)" = 2 ] && (( $(stat -c %Y "$DIR/respaldo") > ult )); then
+        :   # Zangetsu avisó que falló después del último respaldo bueno: se queda hasta el siguiente
+    else
+        h=$(date -d "@$ult" +%-H:%M); dia=$(date -d "@$ult" +%F)
+        if [ "$dia" = "$(date +%F)" ]; then (( $(date -d "@$ult" +%-H) < 6 )) && cuando="anoche $h" || cuando="hoy $h"
+        elif [ "$dia" = "$(date -d yesterday +%F)" ]; then cuando="ayer $h"
+        else cuando=$(date -d "@$ult" '+%-d %b'); fi
+        gema respaldo 0 "al día · $cuando"
+    fi
+fi
+exit 0

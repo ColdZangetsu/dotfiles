@@ -36,6 +36,7 @@ sunshine_monitor() {
 
 on() {
     touch "$ESTADO"
+    [ -x ~/.local/bin/nero-gema ] && ~/.local/bin/nero-gema casa 0 "apagado · pantalla al iPad" >/dev/null 2>&1 || true   # gema de Tsuka
     ~/.local/bin/govee off --forzar >/dev/null 2>&1 &   # el candado es para la música y el Apple TV, no para dormir/salir (2026-11-09)
     ~/.local/bin/teclado-luz off >/dev/null 2>&1
 
@@ -60,6 +61,10 @@ on() {
     for m in "${REAL[@]}"; do dsp "hl.dsp.dpms({action=\"disable\", monitor=\"$m\"})"; done
     dsp "hl.dsp.focus({monitor=\"$VIRTUAL\"})"   # al apagar los monitores el foco se regresa al ASUS
     dsp "hl.dsp.focus({workspace=\"name:gaming\"})" # y que se vea Steam, no un escritorio vacío
+    # 11-12: también el MOUSE al monitor virtual. Si se queda en un monitor apagado, ahí aparecen las ventanas nuevas
+    # (p. ej. "Desbloquear depósito" del llavero) y Moonlight no las ve
+    read -r cx cy < <(hyprctl monitors -j | jq -r --arg v "$VIRTUAL" '.[] | select(.name == $v) | "\(.x + (.width/2|floor)) \(.y + (.height/2|floor))"')
+    [ -n "$cx" ] && dsp "hl.dsp.cursor.move({x=$cx, y=$cy})"
     # Estilo SteamOS: Big Picture a pantalla completa en STREAM (se apaga solo al salir del modo)
     systemctl --user is-active -q modo-trabajo-steamos || systemd-run --user --unit=modo-trabajo-steamos --collect "$HOME/.local/bin/modo-trabajo-steamos" >/dev/null 2>&1
     wait
@@ -87,6 +92,7 @@ off() {
     (~/.local/bin/govee on --forzar && ~/.local/bin/govee fondo --forzar) >/dev/null 2>&1   # también con candado (2026-11-09, pedido del usuario)
     ~/.local/bin/teclado-luz on >/dev/null 2>&1
     rm -f "$ESTADO"
+    [ -x ~/.local/bin/nero-gema ] && ~/.local/bin/nero-gema casa 1 "encendido · en casa" >/dev/null 2>&1 || true   # gema de Tsuka
     systemctl --user stop modo-trabajo-steamos 2>/dev/null
     systemctl --user stop modo-trabajo-candado 2>/dev/null   # al salir vuelve a prender teclado/mouse
     # Por si el candado no alcanzó a prenderlos: todo teclado/mouse/touch encendido
@@ -113,6 +119,6 @@ case "$1" in
     on) on ;;
     off) off ;;
     estado) [ -e "$ESTADO" ] && echo "trabajo" || echo "casa" ;;
-    bloquear) ;;   # lo llama Sunshine al terminar una sesión de Moonlight; ya no bloquea (ver on)
+    bloquear) [ -x ~/.local/bin/nero-gema ] && ~/.local/bin/nero-gema stream 0 "nadie conectado" >/dev/null 2>&1 || true ;;   # lo llama Sunshine al terminar una sesión de Moonlight; ya no bloquea (ver on); solo apaga la gema stream de Tsuka
     *) case "$(basename "$0")" in modo-casa) off ;; *) echo "uso: modo-trabajo on|off|estado"; exit 1 ;; esac ;;
 esac

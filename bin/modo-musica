@@ -10,6 +10,7 @@ APAGAR=(DP-1 DP-2)   # LG y ASUS
 
 if systemctl --user is-active -q govee-musica; then
     systemctl --user stop govee-musica
+    [ -x ~/.local/bin/nero-gema ] && ~/.local/bin/nero-gema musica 0 "apagado" >/dev/null 2>&1 || true   # gema de Tsuka
     hyprctl eval "hl.device({name=\"$TOUCH\", enabled=false})" >/dev/null
     hyprctl eval 'hl.config({misc={mouse_move_enables_dpms=true, key_press_enables_dpms=true}})' >/dev/null
     for m in "${APAGAR[@]}"; do hyprctl dispatch "hl.dsp.dpms({action=\"enable\", monitor=\"$m\"})" >/dev/null; done
@@ -21,6 +22,7 @@ fi
 
 timeout 4 ssh -o ConnectTimeout=3 -o BatchMode=yes zangetsu "systemctl --user stop govee-musica" >/dev/null 2>&1
 systemctl --user start govee-musica
+[ -x ~/.local/bin/nero-gema ] && ~/.local/bin/nero-gema musica 1 "encendido · luces al ritmo" >/dev/null 2>&1 || true   # gema de Tsuka
 hyprctl eval "hl.device({name=\"$TOUCH\", enabled=true, output=\"$XENEON\"})" >/dev/null
 notify-send -a "Modo música" -u low -i audio-x-generic -h string:x-canonical-private-synchronous:modo-musica "Modo música" "Luces al ritmo, touch del XENEON prendido"
 
@@ -37,7 +39,8 @@ hay_cider() { hyprctl clients -j | jq -e 'any(.[]; .class | ascii_downcase == "c
 recien=0
 if ! hay_cider; then
     recien=1
-    setsid -f flatpak run --branch=stable --arch=x86_64 --command=cider-wrapper sh.cider.Cider >/dev/null 2>&1
+    # 11-13: abrirlo POR HYPRLAND (su entorno). Lanzado desde ssh/VS Code/Claude el zygote de Cider truena (SIGTRAP) y nunca sale ventana.
+    hyprctl eval 'hl.dispatch(hl.dsp.exec_cmd("flatpak run --branch=stable --arch=x86_64 --command=cider-wrapper sh.cider.Cider"))' >/dev/null
     for i in $(seq 1 60); do hay_cider && break; sleep 0.5; done
 fi
 # por si se abrió (o ya estaba) fuera del workspace de música

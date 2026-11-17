@@ -13,7 +13,7 @@ falta() {
     { [[ -e "$XDG_RUNTIME_DIR/modo-trabajo" ]] && ! pgrep -f 'modo-trabajo on' >/dev/null; } || f+=('modo trabajo')
     systemctl --user -q is-active app-dev.lizardbyte.app.Sunshine || f+=('Sunshine')
     pgrep -x steam >/dev/null || f+=('Steam')
-    systemctl --user -q is-active nero-remoto || f+=('Nero Linux')
+    pgrep -f -- 'remote-control.*Nero Linux' >/dev/null || f+=('Nero Linux')  # 11-11: ahora corre en VS Code
     local IFS=','; echo "${f[*]}"
 }
 
